@@ -1,39 +1,41 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.energy.worldgen;
 
-import buildcraft.BuildCraftCore;
-import buildcraft.BuildCraftEnergy;
-
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
+
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockFlower;
-import net.minecraft.block.BlockFluid;
+import net.minecraft.block.BlockStaticLiquid;
 import net.minecraft.block.material.Material;
+import net.minecraft.init.Blocks;
 import net.minecraft.world.World;
 import net.minecraft.world.biome.BiomeGenBase;
 import net.minecraft.world.chunk.Chunk;
-import net.minecraftforge.common.BiomeDictionary;
-import static net.minecraftforge.common.BiomeDictionary.Type.DESERT;
-import static net.minecraftforge.common.BiomeDictionary.Type.FOREST;
-import static net.minecraftforge.common.BiomeDictionary.Type.FROZEN;
-import static net.minecraftforge.common.BiomeDictionary.Type.WASTELAND;
-import net.minecraftforge.common.EnumHelper;
-import net.minecraftforge.common.ForgeDirection;
-import net.minecraftforge.event.ForgeSubscribe;
+
+import cpw.mods.fml.common.eventhandler.Event.Result;
+import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+
+import net.minecraftforge.common.util.EnumHelper;
+import net.minecraftforge.common.util.ForgeDirection;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent;
 import net.minecraftforge.event.terraingen.PopulateChunkEvent.Populate.EventType;
 import net.minecraftforge.event.terraingen.TerrainGen;
+import net.minecraftforge.fluids.BlockFluidBase;
 import net.minecraftforge.fluids.IFluidBlock;
 
-public class OilPopulate {
+import buildcraft.BuildCraftCore;
+import buildcraft.BuildCraftEnergy;
+
+public final class OilPopulate {
 
 	public static final OilPopulate INSTANCE = new OilPopulate();
 	public static final EventType EVENT_TYPE = EnumHelper.addEnum(EventType.class, "BUILDCRAFT_OIL", new Class[0], new Object[0]);
@@ -57,11 +59,12 @@ public class OilPopulate {
 		excludedBiomes.add(BiomeGenBase.hell.biomeID);
 	}
 
-	@ForgeSubscribe
+	@SubscribeEvent
 	public void populate(PopulateChunkEvent.Pre event) {
 		boolean doGen = TerrainGen.populate(event.chunkProvider, event.world, event.rand, event.chunkX, event.chunkX, event.hasVillageGenerated, EVENT_TYPE);
 
 		if (!doGen) {
+			event.setResult(Result.ALLOW);
 			return;
 		}
 
@@ -77,28 +80,28 @@ public class OilPopulate {
 		BiomeGenBase biome = world.getBiomeGenForCoords(x, z);
 
 		// Do not generate oil in the End or Nether
-		if (excludedBiomes.contains(biome.biomeID)) {
+		if (BuildCraftEnergy.excludeOilBiomeIDs.contains(biome.biomeID)) {
 			return;
 		}
 
-		boolean oilBiome = surfaceDepositBiomes.contains(biome.biomeID)
-				|| BiomeDictionary.isBiomeOfType(biome, DESERT)
-				|| (BiomeDictionary.isBiomeOfType(biome, WASTELAND) && !BiomeDictionary.isBiomeOfType(biome, FROZEN))
-				|| (BiomeDictionary.isBiomeOfType(biome, FOREST) && BiomeDictionary.isBiomeOfType(biome, FROZEN));
+		boolean oilBiome = BuildCraftEnergy.oilBiomeIDs.contains(biome.biomeID);
 
 		double bonus = oilBiome ? 3.0 : 1.0;
 		bonus *= BuildCraftEnergy.oilWellScalar;
-		if (excessiveBiomes.contains(biome.biomeID)) {
+		if (BuildCraftEnergy.excessiveOilBiomeIDs.contains(biome.biomeID)) {
 			bonus *= 30.0;
 		} else if (BuildCraftCore.debugMode) {
 			bonus *= 20.0;
 		}
 		GenType type = GenType.NONE;
-		if (rand.nextDouble() <= 0.0004 * bonus) {// 0.04%
+		if (rand.nextDouble() <= 0.0004 * bonus) {
+			// 0.04%
 			type = GenType.LARGE;
-		} else if (rand.nextDouble() <= 0.001 * bonus) {// 0.1%
+		} else if (rand.nextDouble() <= 0.001 * bonus) {
+			// 0.1%
 			type = GenType.MEDIUM;
-		} else if (oilBiome && rand.nextDouble() <= 0.02 * bonus) {// 2%
+		} else if (oilBiome && rand.nextDouble() <= 0.02 * bonus) {
+			// 2%
 			type = GenType.LAKE;
 		}
 
@@ -150,7 +153,7 @@ public class OilPopulate {
 						int distance = poolX * poolX + poolY * poolY + poolZ * poolZ;
 
 						if (distance <= radiusSq) {
-							world.setBlock(poolX + wellX, poolY + wellY, poolZ + wellZ, BuildCraftEnergy.blockOil.blockID, 0, distance == radiusSq ? 3 : 2);
+							world.setBlock(poolX + wellX, poolY + wellY, poolZ + wellZ, BuildCraftEnergy.blockOil, 0, distance == radiusSq ? 3 : 2);
 						}
 					}
 				}
@@ -168,29 +171,29 @@ public class OilPopulate {
 			}
 			generateSurfaceDeposit(world, rand, biome, wellX, groundLevel, wellZ, lakeRadius);
 
+			boolean makeSpring = type == GenType.LARGE && BuildCraftEnergy.spawnOilSprings && BuildCraftCore.springBlock != null && (BuildCraftCore.debugMode || rand.nextDouble() <= 0.25);
+
 			// Generate Spout
 			int baseY;
-			if (type == GenType.LARGE && BuildCraftEnergy.spawnOilSprings && (BuildCraftCore.debugMode || rand.nextDouble() <= 0.25)) {
+			if (makeSpring) {
 				baseY = 0;
 			} else {
 				baseY = wellY;
 			}
 
-			if (world.getBlockId(wellX, baseY, wellZ) == Block.bedrock.blockID) {
-				if (BuildCraftEnergy.spawnOilSprings) {
-					world.setBlock(wellX, baseY, wellZ, BuildCraftCore.springBlock.blockID, 1, 3);
-				}
+			if (makeSpring && world.getBlock(wellX, baseY, wellZ) == Blocks.bedrock) {
+				world.setBlock(wellX, baseY, wellZ, BuildCraftCore.springBlock, 1, 3);
 			}
 			for (int y = baseY + 1; y <= maxHeight; ++y) {
-				world.setBlock(wellX, y, wellZ, BuildCraftEnergy.blockOil.blockID);
+				world.setBlock(wellX, y, wellZ, BuildCraftEnergy.blockOil);
 			}
 
 			if (type == GenType.LARGE) {
 				for (int y = wellY; y <= maxHeight - wellHeight / 2; ++y) {
-					world.setBlock(wellX + 1, y, wellZ, BuildCraftEnergy.blockOil.blockID);
-					world.setBlock(wellX - 1, y, wellZ, BuildCraftEnergy.blockOil.blockID);
-					world.setBlock(wellX, y, wellZ + 1, BuildCraftEnergy.blockOil.blockID);
-					world.setBlock(wellX, y, wellZ - 1, BuildCraftEnergy.blockOil.blockID);
+					world.setBlock(wellX + 1, y, wellZ, BuildCraftEnergy.blockOil);
+					world.setBlock(wellX - 1, y, wellZ, BuildCraftEnergy.blockOil);
+					world.setBlock(wellX, y, wellZ + 1, BuildCraftEnergy.blockOil);
+					world.setBlock(wellX, y, wellZ - 1, BuildCraftEnergy.blockOil);
 				}
 			}
 
@@ -200,8 +203,8 @@ public class OilPopulate {
 			int lakeZ = z;
 			int lakeY = groundLevel;
 
-			int blockId = world.getBlockId(lakeX, lakeY, lakeZ);
-			if (blockId == biome.topBlock) {
+			Block block = world.getBlock(lakeX, lakeY, lakeZ);
+			if (block == biome.topBlock) {
 				generateSurfaceDeposit(world, rand, biome, lakeX, lakeY, lakeZ, 5 + rand.nextInt(10));
 			}
 		}
@@ -254,37 +257,42 @@ public class OilPopulate {
 	}
 
 	private boolean isReplaceableFluid(World world, int x, int y, int z) {
-		int blockId = world.getBlockId(x, y, z);
-		Block block = Block.blocksList[blockId];
-		return (block instanceof BlockFluid || block instanceof IFluidBlock) && block.blockMaterial != Material.lava;
+		Block block = world.getBlock(x, y, z);
+		return (block instanceof BlockStaticLiquid || block instanceof BlockFluidBase || block instanceof IFluidBlock) && block.getMaterial() != Material.lava;
 	}
 
 	private boolean isOil(World world, int x, int y, int z) {
-		int blockId = world.getBlockId(x, y, z);
-		return (blockId == BuildCraftEnergy.blockOil.blockID);
+		Block block = world.getBlock(x, y, z);
+		return block == BuildCraftEnergy.blockOil;
 	}
 
 	private boolean isReplaceableForLake(World world, BiomeGenBase biome, int x, int y, int z) {
-		int blockId = world.getBlockId(x, y, z);
-		if (blockId == 0) {
+		Block block = world.getBlock(x, y, z);
+
+		if (block == null) {
 			return true;
 		}
-		if (blockId == biome.fillerBlock || blockId == biome.topBlock) {
+
+		if (block == biome.fillerBlock || block == biome.topBlock) {
 			return true;
 		}
-		Block block = Block.blocksList[blockId];
-		if (!block.blockMaterial.blocksMovement()) {
+
+		if (!block.getMaterial().blocksMovement()) {
 			return true;
 		}
-		if (block.isGenMineableReplaceable(world, x, y, z, Block.stone.blockID)) {
+
+		if (block.isReplaceableOreGen(world, x, y, z, Blocks.stone)) {
 			return true;
 		}
+
 		if (block instanceof BlockFlower) {
 			return true;
 		}
-		if (!world.isBlockOpaqueCube(x, y, z)) {
+
+		if (!block.isOpaqueCube()) {
 			return true;
 		}
+
 		return false;
 	}
 
@@ -303,7 +311,7 @@ public class OilPopulate {
 	}
 
 	private void setOilWithProba(World world, BiomeGenBase biome, Random rand, float proba, int x, int y, int z, int depth) {
-		if (rand.nextFloat() <= proba && world.getBlockId(x, y - depth - 1, z) != 0) {
+		if (rand.nextFloat() <= proba && world.getBlock(x, y - depth - 1, z) != null) {
 			if (isOilAdjacent(world, x, y, z)) {
 				setOilColumnForLake(world, biome, x, y, z, depth, 3);
 			}
@@ -315,20 +323,20 @@ public class OilPopulate {
 			if (!world.isAirBlock(x, y + 2, z)) {
 				return;
 			}
-			if (isReplaceableFluid(world, x, y, z) || world.isBlockSolidOnSide(x, y - 1, z, ForgeDirection.UP)) {
-				world.setBlock(x, y, z, BuildCraftEnergy.blockOil.blockID, 0, update);
+			if (isReplaceableFluid(world, x, y, z) || world.isSideSolid(x, y - 1, z, ForgeDirection.UP)) {
+				world.setBlock(x, y, z, BuildCraftEnergy.blockOil, 0, update);
 			} else {
 				return;
 			}
 			if (!world.isAirBlock(x, y + 1, z)) {
-				world.setBlock(x, y + 1, z, 0, 0, update);
+				world.setBlock(x, y + 1, z, Blocks.air, 0, update);
 			}
 
 			for (int d = 1; d <= depth - 1; d++) {
-				if (isReplaceableFluid(world, x, y - d, z) || !world.isBlockSolidOnSide(x, y - d - 1, z, ForgeDirection.UP)) {
+				if (isReplaceableFluid(world, x, y - d, z) || !world.isSideSolid(x, y - d - 1, z, ForgeDirection.UP)) {
 					return;
 				}
-				world.setBlock(x, y - d, z, BuildCraftEnergy.blockOil.blockID, 0, 2);
+				world.setBlock(x, y - d, z, BuildCraftEnergy.blockOil, 0, 2);
 			}
 		}
 	}
@@ -341,23 +349,32 @@ public class OilPopulate {
 		int trimmedZ = z & 15;
 
 		for (; y > 0; --y) {
-			int blockId = chunk.getBlockID(trimmedX, y, trimmedZ);
-			Block block = Block.blocksList[blockId];
-			if (blockId == 0) {
+			Block block = chunk.getBlock(trimmedX, y, trimmedZ);
+
+			if (block == null) {
 				continue;
 			}
-			if (block instanceof BlockFluid) {
+
+			if (block instanceof BlockStaticLiquid) {
 				return y;
 			}
+
+			if (block instanceof BlockFluidBase) {
+				return y;
+			}
+
 			if (block instanceof IFluidBlock) {
 				return y;
 			}
-			if (!block.blockMaterial.blocksMovement()) {
+
+			if (!block.getMaterial().blocksMovement()) {
 				continue;
 			}
+
 			if (block instanceof BlockFlower) {
 				continue;
 			}
+
 			return y - 1;
 		}
 

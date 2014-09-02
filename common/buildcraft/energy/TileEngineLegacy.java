@@ -1,8 +1,9 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.energy;
@@ -13,10 +14,8 @@ import net.minecraft.util.ResourceLocation;
 
 /**
  * This class is just intended to update pre 4.0 engines to the design.
- *
+ * <p/>
  * It can be deleted someday.
- *
- * @author CovertJaguar <http://www.railcraft.info/>
  */
 public class TileEngineLegacy extends TileEngine {
 
@@ -24,8 +23,8 @@ public class TileEngineLegacy extends TileEngine {
 
 	@Override
 	public void updateEntity() {
-		worldObj.removeBlockTileEntity(xCoord, yCoord, zCoord);
-		TileEntity newTile = worldObj.getBlockTileEntity(xCoord, yCoord, zCoord);
+		worldObj.removeTileEntity(xCoord, yCoord, zCoord);
+		TileEntity newTile = worldObj.getTileEntity(xCoord, yCoord, zCoord);
 		if (newTile instanceof TileEngine) {
 			newTile.readFromNBT(nbt);
 			sendNetworkUpdate();
@@ -42,17 +41,22 @@ public class TileEngineLegacy extends TileEngine {
 	}
 
 	@Override
-	public ResourceLocation getTextureFile() {
-		return WOOD_TEXTURE;
+	public ResourceLocation getBaseTexture() {
+		return BASE_TEXTURES[0];
 	}
 
 	@Override
-	public float getMaxEnergy() {
+	public ResourceLocation getChamberTexture() {
+		return CHAMBER_TEXTURES[0];
+	}
+
+	@Override
+	public double getMaxEnergy() {
 		return 1;
 	}
 
 	@Override
-	public float maxEnergyReceived() {
+	public double maxEnergyReceived() {
 		return 0;
 	}
 
@@ -72,12 +76,12 @@ public class TileEngineLegacy extends TileEngine {
 	}
 
 	@Override
-	public float getCurrentOutput() {
+	public double getCurrentOutput() {
 		return 1;
 	}
 
 	@Override
-	public float maxEnergyExtracted() {
+	public double maxEnergyExtracted() {
 		return 1;
 	}
 }

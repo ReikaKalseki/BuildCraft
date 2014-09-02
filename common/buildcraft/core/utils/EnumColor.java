@@ -1,11 +1,15 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.core.utils;
 
 import java.util.Locale;
 
-/**
- *
- * @author CovertJaguar <http://www.railcraft.info>
- */
 public enum EnumColor {
 
 	BLACK,
@@ -24,8 +28,8 @@ public enum EnumColor {
 	MAGENTA,
 	ORANGE,
 	WHITE;
-	public final static EnumColor[] VALUES = values();
-	public final static String[] DYES = {
+	public static final EnumColor[] VALUES = values();
+	public static final String[] DYES = {
 		"dyeBlack",
 		"dyeRed",
 		"dyeGreen",
@@ -42,7 +46,7 @@ public enum EnumColor {
 		"dyeMagenta",
 		"dyeOrange",
 		"dyeWhite"};
-	public final static String[] NAMES = {
+	public static final String[] NAMES = {
 		"Black",
 		"Red",
 		"Green",
@@ -59,7 +63,7 @@ public enum EnumColor {
 		"Magenta",
 		"Orange",
 		"White"};
-	public final static int[] DARK_HEX = {
+	public static final int[] DARK_HEX = {
 		0x2D2D2D,
 		0xA33835,
 		0x394C1E,
@@ -76,7 +80,7 @@ public enum EnumColor {
 		0xFF64FF,
 		0xFF6A00,
 		0xFFFFFF};
-	public final static int[] LIGHT_HEX = {
+	public static final int[] LIGHT_HEX = {
 		0x181414,
 		0xBE2B27,
 		0x007F0E,
@@ -157,7 +161,7 @@ public enum EnumColor {
 		return NAMES[ordinal()];
 	}
 
-	public String getTranslatedName() {
+	public String getLocalizedName() {
 		return StringUtils.localize(getTag());
 	}
 

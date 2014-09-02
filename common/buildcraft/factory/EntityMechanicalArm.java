@@ -1,25 +1,21 @@
 /**
- * Copyright (c) SpaceToad, 2011
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
  *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
-
 package buildcraft.factory;
 
-import buildcraft.core.EntityBlock;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.world.World;
 
-public class EntityMechanicalArm extends Entity {
-	EntityBlock xArm, yArm, zArm, head;
+import buildcraft.core.EntityBlock;
 
-	boolean inProgressionXZ = false;
-	boolean inProgressionY = false;
+public class EntityMechanicalArm extends Entity {
 
 	protected TileQuarry parent;
 
@@ -29,27 +25,28 @@ public class EntityMechanicalArm extends Entity {
 	private double yRoot;
 	private double zRoot;
 
+	private boolean inProgressionXZ = false;
+	private boolean inProgressionY = false;
 	private int headX, headY, headZ;
+	private EntityBlock xArm, yArm, zArm, head;
 
 	public EntityMechanicalArm(World world) {
 		super(world);
 		makeParts(world);
+		noClip = true;
 	}
 
-	public EntityMechanicalArm(World world, double i, double j, double k, double width, double height, TileQuarry parent) {
+	public EntityMechanicalArm(World world, double x, double y, double z, double width, double height, TileQuarry parent) {
 		this(world);
 		setPositionAndRotation(parent.xCoord, parent.yCoord, parent.zCoord, 0, 0);
-		this.xRoot = i;
-		this.yRoot = j;
-		this.zRoot = k;
+		this.xRoot = x;
+		this.yRoot = y;
+		this.zRoot = z;
 		this.motionX = 0.0;
 		this.motionY = 0.0;
 		this.motionZ = 0.0;
 		setArmSize(width, height);
-		setHead(i, j - 2, k);
-
-		noClip = true;
-
+		setHead(x, y - 2, z);
 		this.parent = parent;
 		parent.setArm(this);
 		updatePosition();
@@ -99,7 +96,7 @@ public class EntityMechanicalArm extends Entity {
 	}
 
 	private void findAndJoinQuarry() {
-		TileEntity te = worldObj.getBlockTileEntity((int) posX, (int) posY, (int) posZ);
+		TileEntity te = worldObj.getTileEntity((int) posX, (int) posY, (int) posZ);
 		if (te != null && te instanceof TileQuarry) {
 			parent = (TileQuarry) te;
 			parent.setArm(this);
@@ -132,12 +129,12 @@ public class EntityMechanicalArm extends Entity {
 	}
 
 	public void updatePosition() {
-		double[] head = getHead();
-		this.xArm.setPosition(xRoot, yRoot, head[2] + 0.25);
-		this.yArm.jSize = yRoot - head[1] - 1;
-		this.yArm.setPosition(head[0] + 0.25, head[1] + 1, head[2] + 0.25);
-		this.zArm.setPosition(head[0] + 0.25, yRoot, zRoot);
-		this.head.setPosition(head[0] + 0.4, head[1], head[2] + 0.4);
+		double[] headT = getHead();
+		this.xArm.setPosition(xRoot, yRoot, headT[2] + 0.25);
+		this.yArm.jSize = yRoot - headT[1] - 1;
+		this.yArm.setPosition(headT[0] + 0.25, headT[1] + 1, headT[2] + 0.25);
+		this.zArm.setPosition(headT[0] + 0.25, yRoot, zRoot);
+		this.head.setPosition(headT[0] + 0.4, headT[1], headT[2] + 0.4);
 	}
 
 	@Override

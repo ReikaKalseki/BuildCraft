@@ -1,8 +1,9 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.energy;
@@ -11,17 +12,18 @@ import java.util.LinkedList;
 
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.ICrafting;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.world.biome.BiomeGenBase;
-import net.minecraftforge.common.ForgeDirection;
+
+import net.minecraftforge.common.util.ForgeDirection;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidContainerRegistry;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.fluids.FluidTankInfo;
 import net.minecraftforge.fluids.IFluidHandler;
+
 import buildcraft.BuildCraftCore;
 import buildcraft.BuildCraftEnergy;
 import buildcraft.api.fuels.IronEngineCoolant;
@@ -34,8 +36,7 @@ import buildcraft.core.IItemPipe;
 import buildcraft.core.fluids.FluidUtils;
 import buildcraft.core.fluids.Tank;
 import buildcraft.core.fluids.TankManager;
-import buildcraft.core.proxy.CoreProxy;
-import buildcraft.core.utils.Utils;
+import buildcraft.core.inventory.InvUtils;
 import buildcraft.energy.gui.ContainerEngine;
 
 public class TileEngineIron extends TileEngineWithInventory implements IFluidHandler {
@@ -44,26 +45,31 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 	public static float HEAT_PER_MJ = 0.0023F;
 	public static float COOLDOWN_RATE = 0.05F;
 	public static int MAX_COOLANT_PER_TICK = 40;
-	int burnTime = 0;
-	private Tank tankFuel;
-	private Tank tankCoolant;
+
+	public Tank tankFuel = new Tank("tankFuel", MAX_LIQUID, this);
+	public Tank tankCoolant = new Tank("tankCoolant", MAX_LIQUID, this);
+
+	private int burnTime = 0;
 	private TankManager tankManager = new TankManager();
 	private Fuel currentFuel = null;
-	public int penaltyCooling = 0;
-	boolean lastPowered = false;
+	private int penaltyCooling = 0;
+	private boolean lastPowered = false;
 	private BiomeGenBase biomeCache;
 
 	public TileEngineIron() {
 		super(1);
-		tankFuel = new Tank("tankFuel", MAX_LIQUID);
-		tankCoolant = new Tank("tankCoolant", MAX_LIQUID);
 		tankManager.add(tankFuel);
 		tankManager.add(tankCoolant);
 	}
 
 	@Override
-	public ResourceLocation getTextureFile() {
-		return IRON_TEXTURE;
+	public ResourceLocation getBaseTexture() {
+		return BASE_TEXTURES[2];
+	}
+
+	@Override
+	public ResourceLocation getChamberTexture() {
+		return CHAMBER_TEXTURES[2];
 	}
 
 	@Override
@@ -73,9 +79,9 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 				return false;
 			}
 			ItemStack current = player.getCurrentEquippedItem();
-			if (current != null && current.itemID != Item.bucketEmpty.itemID) {
-				if (CoreProxy.proxy.isSimulating(worldObj)) {
-					if (FluidUtils.handleRightClick(this, side, player, true, false)) {
+			if (current != null) {
+				if (!worldObj.isRemote) {
+					if (FluidUtils.handleRightClick(this, side, player, true, true)) {
 						return true;
 					}
 				} else {
@@ -85,7 +91,7 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 				}
 			}
 		}
-		if (!CoreProxy.proxy.isRenderWorld(worldObj)) {
+		if (!worldObj.isRemote) {
 			player.openGui(BuildCraftEnergy.instance, GuiIds.ENGINE_IRON, worldObj, xCoord, yCoord, zCoord);
 		}
 		return true;
@@ -98,7 +104,7 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 
 	@Override
 	public float getPistonSpeed() {
-		if (CoreProxy.proxy.isSimulating(worldObj)) {
+		if (!worldObj.isRemote) {
 			return Math.max(0.07f * getHeatLevel(), 0.01f);
 		}
 		switch (getEnergyStage()) {
@@ -116,8 +122,9 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 	}
 
 	private float getBiomeTempScalar() {
-		if (biomeCache == null)
+		if (biomeCache == null) {
 			biomeCache = worldObj.getBiomeGenForCoords(xCoord, zCoord);
+		}
 		float tempScalar = biomeCache.temperature - 1.0F;
 		tempScalar *= 0.5F;
 		tempScalar += 1.0F;
@@ -143,14 +150,15 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 			currentFuel = IronEngineFuel.getFuelForFluid(fuel.getFluid());
 		}
 
-		if (currentFuel == null)
+		if (currentFuel == null) {
 			return;
+		}
 
 		if (penaltyCooling <= 0 && isRedstonePowered) {
 
 			lastPowered = true;
 
-			if (burnTime > 0 || fuel.amount > 0) {
+			if (burnTime > 0 || (fuel != null && fuel.amount > 0)) {
 				if (burnTime > 0) {
 					burnTime--;
 				}
@@ -195,7 +203,7 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 			if (liquid != null) {
 				if (fill(ForgeDirection.UNKNOWN, liquid, false) == liquid.amount) {
 					fill(ForgeDirection.UNKNOWN, liquid, true);
-					setInventorySlotContents(0, Utils.consumeItem(stack));
+					setInventorySlotContents(0, InvUtils.consumeItem(stack));
 				}
 			}
 		}
@@ -208,19 +216,22 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 			coolEngine(IDEAL_HEAT);
 		}
 
-		if (heat <= MIN_HEAT && penaltyCooling > 0)
+		if (heat <= MIN_HEAT && penaltyCooling > 0) {
 			penaltyCooling--;
+		}
 
-		if (heat <= MIN_HEAT)
+		if (heat <= MIN_HEAT) {
 			heat = MIN_HEAT;
+		}
 	}
 
 	private void coolEngine(float idealHeat) {
 		float extraHeat = heat - idealHeat;
 
 		FluidStack coolant = this.tankCoolant.getFluid();
-		if (coolant == null)
+		if (coolant == null) {
 			return;
+		}
 
 		int coolantAmount = Math.min(MAX_COOLANT_PER_TICK, coolant.amount);
 		Coolant currentCoolant = IronEngineCoolant.getCoolant(coolant);
@@ -239,7 +250,8 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 
 	@Override
 	public int getScaledBurnTime(int i) {
-		return this.tankFuel.getFluid() != null ? (int) (((float) this.tankFuel.getFluid().amount / (float) (MAX_LIQUID)) * i) : 0;
+		return this.tankFuel.getFluid() != null ? (int) (((float) this.tankFuel.getFluid().amount / (float) MAX_LIQUID) * i)
+				: 0;
 	}
 
 	@Override
@@ -263,7 +275,8 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 	}
 
 	public int getScaledCoolant(int i) {
-		return tankCoolant.getFluid() != null ? (int) (((float) tankCoolant.getFluid().amount / (float) (MAX_LIQUID)) * i) : 0;
+		return tankCoolant.getFluid() != null ? (int) (((float) tankCoolant.getFluid().amount / (float) MAX_LIQUID) * i)
+				: 0;
 	}
 
 	@Override
@@ -294,13 +307,21 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 					tankFuel.getFluid().amount = value;
 				}
 				break;
-			// Fluid coolant amount
+			// Fluid Coolant amount
 			case 18:
 				if (tankCoolant.getFluid() == null) {
 					tankCoolant.setFluid(new FluidStack(0, value));
 				} else {
 					tankCoolant.getFluid().amount = value;
 				}
+				break;
+			//Fluid Fuel color
+			case 19:
+				tankFuel.colorRenderCache = value;
+				break;
+			//Fluid Coolant color
+			case 20:
+				tankCoolant.colorRenderCache = value;
 				break;
 		}
 	}
@@ -312,6 +333,8 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 		iCrafting.sendProgressBarUpdate(containerEngine, 16, tankCoolant.getFluid() != null ? tankCoolant.getFluid().fluidID : 0);
 		iCrafting.sendProgressBarUpdate(containerEngine, 17, tankFuel.getFluid() != null ? tankFuel.getFluid().amount : 0);
 		iCrafting.sendProgressBarUpdate(containerEngine, 18, tankCoolant.getFluid() != null ? tankCoolant.getFluid().amount : 0);
+		iCrafting.sendProgressBarUpdate(containerEngine, 19, tankFuel.colorRenderCache);
+		iCrafting.sendProgressBarUpdate(containerEngine, 20, tankCoolant.colorRenderCache);
 	}
 
 	@Override
@@ -322,42 +345,48 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 	/* ITANKCONTAINER */
 	@Override
 	public FluidStack drain(ForgeDirection from, int maxDrain, boolean doDrain) {
-		return null;
+		return tankFuel.drain(maxDrain, doDrain);
 	}
 
 	@Override
 	public FluidStack drain(ForgeDirection from, FluidStack resource, boolean doDrain) {
+		if (resource == null) {
+			return null;
+		}
+		if (tankCoolant.getFluidType() == resource.getFluid()) {
+			return tankCoolant.drain(resource.amount, doDrain);
+		}
+		if (tankFuel.getFluidType() == resource.getFluid()) {
+			return tankFuel.drain(resource.amount, doDrain);
+		}
 		return null;
 	}
 
 	@Override
 	public boolean canDrain(ForgeDirection from, Fluid fluid) {
-		// TODO Auto-generated method stub
-		return false;
+		return true;
 	}
 
 	@Override
 	public int fill(ForgeDirection from, FluidStack resource, boolean doFill) {
 
 		// Handle coolant
-		if (IronEngineCoolant.getCoolant(resource) != null)
+		if (IronEngineCoolant.getCoolant(resource) != null) {
 			return tankCoolant.fill(resource, doFill);
-
-		if (IronEngineFuel.getFuelForFluid(resource.getFluid()) != null)
+		} else if (IronEngineFuel.getFuelForFluid(resource.getFluid()) != null) {
 			return tankFuel.fill(resource, doFill);
-
-		return 0;
+		} else {
+			return 0;
+		}
 	}
 
 	@Override
 	public boolean canFill(ForgeDirection from, Fluid fluid) {
-		if (IronEngineCoolant.isCoolant(fluid))
+		if (IronEngineCoolant.isCoolant(fluid)) {
 			return true;
-
-		if (IronEngineFuel.getFuelForFluid(fluid) != null)
-			return true;
-
-		return false;
+		} else {
+			return IronEngineFuel.getFuelForFluid(fluid) != null;
+		}
 	}
 
 	@Override
@@ -367,11 +396,13 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 
 	@Override
 	public boolean isItemValidForSlot(int i, ItemStack itemstack) {
-		if (itemstack == null)
+		if (itemstack == null) {
 			return false;
-		if (IronEngineCoolant.getCoolant(itemstack) != null)
+		} else if (IronEngineCoolant.getCoolant(itemstack) != null) {
 			return true;
-		return FluidContainerRegistry.getFluidForFilledItem(itemstack) != null;
+		} else {
+			return FluidContainerRegistry.getFluidForFilledItem(itemstack) != null;
+		}
 	}
 
 	public FluidStack getFuel() {
@@ -383,22 +414,22 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 	}
 
 	@Override
-	public float maxEnergyReceived() {
+	public double maxEnergyReceived() {
 		return 2000;
 	}
 
 	@Override
-	public float maxEnergyExtracted() {
+	public double maxEnergyExtracted() {
 		return 500;
 	}
 
 	@Override
-	public float getMaxEnergy() {
+	public double getMaxEnergy() {
 		return 10000;
 	}
 
 	@Override
-	public float getCurrentOutput() {
+	public double getCurrentOutput() {
 		if (currentFuel == null) {
 			return 0;
 		}
@@ -412,7 +443,15 @@ public class TileEngineIron extends TileEngineWithInventory implements IFluidHan
 		triggers.add(BuildCraftCore.triggerContainsFluid);
 		triggers.add(BuildCraftCore.triggerSpaceFluid);
 		triggers.add(BuildCraftCore.triggerFullFluid);
+		triggers.add(BuildCraftCore.triggerFluidContainerBelow25);
+		triggers.add(BuildCraftCore.triggerFluidContainerBelow50);
+		triggers.add(BuildCraftCore.triggerFluidContainerBelow75);
 
 		return triggers;
+	}
+
+	@Override
+	public boolean hasCustomInventoryName() {
+		return false;
 	}
 }

@@ -1,42 +1,43 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.transport.pipes;
 
-import buildcraft.BuildCraftTransport;
-import buildcraft.api.core.IIconProvider;
-import buildcraft.api.core.Position;
-import buildcraft.api.gates.IAction;
-import buildcraft.api.tools.IToolWrench;
-import buildcraft.core.utils.EnumColor;
-import buildcraft.core.utils.Utils;
-import buildcraft.transport.IItemTravelingHook;
-import buildcraft.transport.IPipeTransportItemsHook;
-import buildcraft.transport.Pipe;
-import buildcraft.transport.PipeIconProvider;
-import buildcraft.transport.PipeTransportItems;
-import buildcraft.transport.TravelingItem;
-import buildcraft.transport.triggers.ActionPipeColor;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Map.Entry;
+
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.Item;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraftforge.common.ForgeDirection;
 
-public class PipeItemsLapis extends Pipe<PipeTransportItems> implements IItemTravelingHook, IPipeTransportItemsHook {
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 
-	public PipeItemsLapis(int itemID) {
-		super(new PipeTransportItems(), itemID);
-		transport.travelHook = this;
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.BuildCraftTransport;
+import buildcraft.api.core.IIconProvider;
+import buildcraft.api.gates.IAction;
+import buildcraft.api.tools.IToolWrench;
+import buildcraft.core.utils.EnumColor;
+import buildcraft.transport.Pipe;
+import buildcraft.transport.PipeIconProvider;
+import buildcraft.transport.PipeTransportItems;
+import buildcraft.transport.TransportConstants;
+import buildcraft.transport.TravelingItem;
+import buildcraft.transport.pipes.events.PipeEventItem;
+import buildcraft.transport.triggers.ActionPipeColor;
+
+public class PipeItemsLapis extends Pipe<PipeTransportItems> {
+
+	public PipeItemsLapis(Item item) {
+		super(new PipeTransportItems(), item);
 	}
 
 	@Override
@@ -47,8 +48,9 @@ public class PipeItemsLapis extends Pipe<PipeTransportItems> implements IItemTra
 
 	@Override
 	public int getIconIndex(ForgeDirection direction) {
-		if (container == null)
-			return PipeIconProvider.TYPE.PipeItemsLapis_White.ordinal();
+		if (container == null) {
+			return PipeIconProvider.TYPE.PipeItemsLapis_Black.ordinal();
+		}
 		return PipeIconProvider.TYPE.PipeItemsLapis_Black.ordinal() + container.getBlockMetadata();
 	}
 
@@ -75,43 +77,26 @@ public class PipeItemsLapis extends Pipe<PipeTransportItems> implements IItemTra
 
 	public void setColor(EnumColor color) {
 		if (color.ordinal() != container.getBlockMetadata()) {
-			container.worldObj.setBlockMetadataWithNotify(container.xCoord, container.yCoord, container.zCoord, color.ordinal(), 3);
+			container.getWorldObj().setBlockMetadataWithNotify(container.xCoord, container.yCoord, container.zCoord, color.ordinal(), 3);
 			container.scheduleRenderUpdate();
 		}
 	}
 
-	@Override
-	public void drop(PipeTransportItems transport, TravelingItem data) {
+	public void eventHandler(PipeEventItem.ReachedCenter event) {
+		event.item.color = getColor();
 	}
 
-	@Override
-	public void centerReached(PipeTransportItems transport, TravelingItem item) {
-		item.color = getColor();
-	}
+	public void eventHandler(PipeEventItem.AdjustSpeed event) {
+		event.handled = true;
+		TravelingItem item = event.item;
 
-	@Override
-	public boolean endReached(PipeTransportItems pipe, TravelingItem item, TileEntity tile) {
-		return false;
-	}
-
-	@Override
-	public void readjustSpeed(TravelingItem item) {
-		if (item.getSpeed() > Utils.pipeNormalSpeed) {
-			item.setSpeed(item.getSpeed() - Utils.pipeNormalSpeed / 4.0F);
+		if (item.getSpeed() > TransportConstants.PIPE_NORMAL_SPEED) {
+			item.setSpeed(item.getSpeed() - TransportConstants.PIPE_NORMAL_SPEED / 4.0F);
 		}
 
-		if (item.getSpeed() < Utils.pipeNormalSpeed) {
-			item.setSpeed(Utils.pipeNormalSpeed);
+		if (item.getSpeed() < TransportConstants.PIPE_NORMAL_SPEED) {
+			item.setSpeed(TransportConstants.PIPE_NORMAL_SPEED);
 		}
-	}
-
-	@Override
-	public LinkedList<ForgeDirection> filterPossibleMovements(LinkedList<ForgeDirection> possibleOrientations, Position pos, TravelingItem travellingItem) {
-		return possibleOrientations;
-	}
-
-	@Override
-	public void entityEntered(TravelingItem travellingItem, ForgeDirection orientation) {
 	}
 
 	@Override

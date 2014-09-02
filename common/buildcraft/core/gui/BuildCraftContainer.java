@@ -1,27 +1,90 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.core.gui;
 
-import buildcraft.core.gui.slots.IPhantomSlot;
-import buildcraft.core.gui.slots.SlotBase;
-import buildcraft.core.inventory.StackHelper;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.Container;
+import net.minecraft.inventory.ICrafting;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
 
+import buildcraft.BuildCraftCore;
+import buildcraft.core.gui.slots.IPhantomSlot;
+import buildcraft.core.gui.slots.SlotBase;
+import buildcraft.core.gui.widgets.Widget;
+import buildcraft.core.inventory.StackHelper;
+import buildcraft.core.network.PacketGuiWidget;
+
 public abstract class BuildCraftContainer extends Container {
 
+	private List<Widget> widgets = new ArrayList<Widget>();
 	private int inventorySize;
 
 	public BuildCraftContainer(int inventorySize) {
 		this.inventorySize = inventorySize;
+	}
+
+	public List<Widget> getWidgets() {
+		return widgets;
+	}
+
+	public void addSlot(Slot slot) {
+		addSlotToContainer(slot);
+	}
+
+	public void addWidget(Widget widget) {
+		widget.addToContainer(this);
+		widgets.add(widget);
+	}
+
+	public void sendWidgetDataToClient(Widget widget, ICrafting player, byte[] data) {
+		PacketGuiWidget pkt = new PacketGuiWidget(windowId, widgets.indexOf(widget), data);
+		BuildCraftCore.instance.sendToPlayer((EntityPlayer) player, pkt);
+	}
+
+	public void handleWidgetClientData(int widgetId, ByteBuf data) {
+		InputStream input = new ByteBufInputStream (data);
+		DataInputStream stream = new DataInputStream(input);
+
+		try {
+			widgets.get(widgetId).handleClientPacketData(stream);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	@Override
+	public void addCraftingToCrafters(ICrafting player) {
+		super.addCraftingToCrafters(player);
+		for (Widget widget : widgets) {
+			widget.initWidget(player);
+		}
+	}
+
+	@Override
+	public void detectAndSendChanges() {
+		super.detectAndSendChanges();
+		for (Widget widget : widgets) {
+			for (ICrafting player : (List<ICrafting>) crafters) {
+				widget.updateWidget(player);
+			}
+		}
 	}
 
 	@Override
@@ -58,7 +121,7 @@ public abstract class BuildCraftContainer extends Container {
 				adjustPhantomSlot(slot, mouseButton, modifier);
 				slot.onPickupFromSlot(player, playerInv.getItemStack());
 			} else if (slot.isItemValid(stackHeld)) {
-				if (StackHelper.instance().canStacksMerge(stackSlot, stackHeld)) {
+				if (StackHelper.canStacksMerge(stackSlot, stackHeld)) {
 					adjustPhantomSlot(slot, mouseButton, modifier);
 				} else {
 					fillPhantomSlot(slot, stackHeld, mouseButton, modifier);
@@ -111,7 +174,7 @@ public abstract class BuildCraftContainer extends Container {
 			for (int slotIndex = start; stackToShift.stackSize > 0 && slotIndex < end; slotIndex++) {
 				Slot slot = (Slot) inventorySlots.get(slotIndex);
 				ItemStack stackInSlot = slot.getStack();
-				if (stackInSlot != null && StackHelper.instance().canStacksMerge(stackInSlot, stackToShift)) {
+				if (stackInSlot != null && StackHelper.canStacksMerge(stackInSlot, stackToShift)) {
 					int resultingStackSize = stackInSlot.stackSize + stackToShift.stackSize;
 					int max = Math.min(stackToShift.getMaxStackSize(), slot.getSlotStackLimit());
 					if (resultingStackSize <= max) {

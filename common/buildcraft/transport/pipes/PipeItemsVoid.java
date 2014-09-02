@@ -1,29 +1,31 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.transport.pipes;
 
+import net.minecraft.item.Item;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
 import buildcraft.BuildCraftTransport;
 import buildcraft.api.core.IIconProvider;
-import buildcraft.transport.IItemTravelingHook;
 import buildcraft.transport.Pipe;
 import buildcraft.transport.PipeIconProvider;
 import buildcraft.transport.PipeTransportItems;
-import buildcraft.transport.TravelingItem;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraftforge.common.ForgeDirection;
+import buildcraft.transport.pipes.events.PipeEventItem;
 
-public class PipeItemsVoid extends Pipe<PipeTransportItems> implements IItemTravelingHook {
+public class PipeItemsVoid extends Pipe<PipeTransportItems> {
 
-	public PipeItemsVoid(int itemID) {
-		super(new PipeTransportItems(), itemID);
-		transport.travelHook = this;
+	public PipeItemsVoid(Item item) {
+		super(new PipeTransportItems(), item);
 	}
 
 	@Override
@@ -37,20 +39,11 @@ public class PipeItemsVoid extends Pipe<PipeTransportItems> implements IItemTrav
 		return PipeIconProvider.TYPE.PipeItemsVoid.ordinal();
 	}
 
-	// This is called if the void pipe is only connected to one pipe
-	@Override
-	public void drop(PipeTransportItems pipe, TravelingItem item) {
-		item.getItemStack().stackSize = 0;
+	public void eventHandler(PipeEventItem.DropItem event) {
+		event.entity = null;
 	}
 
-	// This is called when the void pipe is connected to multiple pipes
-	@Override
-	public void centerReached(PipeTransportItems pipe, TravelingItem item) {
-		transport.items.scheduleRemoval(item);
-	}
-
-	@Override
-	public boolean endReached(PipeTransportItems pipe, TravelingItem item, TileEntity tile) {
-		return false;
+	public void eventHandler(PipeEventItem.ReachedCenter event) {
+		transport.items.scheduleRemoval(event.item);
 	}
 }

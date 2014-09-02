@@ -1,22 +1,23 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.core.triggers;
+
+import net.minecraft.client.renderer.texture.IIconRegister;
+import net.minecraft.util.IIcon;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 
 import buildcraft.api.gates.ActionManager;
 import buildcraft.api.gates.ITrigger;
 import buildcraft.api.gates.ITriggerParameter;
 import buildcraft.api.gates.TriggerParameter;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
-import net.minecraft.client.renderer.texture.IconRegister;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Icon;
-import net.minecraftforge.common.ForgeDirection;
 
 /**
  * This class has to be implemented to create new triggers kinds to BuildCraft
@@ -25,23 +26,25 @@ import net.minecraftforge.common.ForgeDirection;
  */
 public abstract class BCTrigger implements ITrigger {
 
-	protected final int legacyId;
 	protected final String uniqueTag;
 
-	public BCTrigger(int legacyId, String uniqueTag) {
-		this.legacyId = legacyId;
-		this.uniqueTag = uniqueTag;
-		ActionManager.registerTrigger(this);
+	/**
+	 * UniqueTag accepts multiple possible tags, use this feature to migrate to
+	 * more standardized tags if needed, otherwise just pass a single string.
+	 * The first passed string will be the one used when saved to disk.
+	 *
+	 * @param uniqueTag
+	 */
+	public BCTrigger(String... uniqueTag) {
+		this.uniqueTag = uniqueTag[0];
+		for (String tag : uniqueTag) {
+			ActionManager.triggers.put(tag, this);
+		}
 	}
 
 	@Override
 	public String getUniqueTag() {
 		return uniqueTag;
-	}
-
-	@Override
-	public int getLegacyId() {
-		return this.legacyId;
 	}
 
 	public int getIconIndex() {
@@ -50,13 +53,13 @@ public abstract class BCTrigger implements ITrigger {
 
 	@Override
 	@SideOnly(Side.CLIENT)
-	public Icon getIcon() {
+	public IIcon getIcon() {
 		return ActionTriggerIconProvider.INSTANCE.getIcon(getIconIndex());
 	}
 
 	@Override
 	@SideOnly(Side.CLIENT)
-	public void registerIcons(IconRegister iconRegister) {
+	public void registerIcons(IIconRegister iconRegister) {
 	}
 
 	@Override
@@ -65,13 +68,13 @@ public abstract class BCTrigger implements ITrigger {
 	}
 
 	@Override
-	public String getDescription() {
-		return "";
+	public boolean requiresParameter() {
+		return false;
 	}
 
 	@Override
-	public boolean isTriggerActive(ForgeDirection side, TileEntity tile, ITriggerParameter parameter) {
-		return false;
+	public String getDescription() {
+		return "";
 	}
 
 	@Override

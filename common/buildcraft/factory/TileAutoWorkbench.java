@@ -1,22 +1,15 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.factory;
 
-import buildcraft.core.TileBuildCraft;
-import buildcraft.core.inventory.InvUtils;
-import buildcraft.core.inventory.InventoryConcatenator;
-import buildcraft.core.inventory.InventoryIterator;
-import buildcraft.core.inventory.InventoryIterator.IInvSlot;
-import buildcraft.core.inventory.SimpleInventory;
-import buildcraft.core.inventory.StackHelper;
-import buildcraft.core.proxy.CoreProxy;
-import buildcraft.core.utils.CraftingHelper;
-import buildcraft.core.utils.Utils;
+import java.lang.ref.WeakReference;
+
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Container;
 import net.minecraft.inventory.IInventory;
@@ -27,9 +20,20 @@ import net.minecraft.inventory.SlotCrafting;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.crafting.IRecipe;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.util.ChatMessageComponent;
-import net.minecraft.util.ChunkCoordinates;
-import net.minecraftforge.common.ForgeDirection;
+import net.minecraft.world.WorldServer;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.api.core.IInvSlot;
+import buildcraft.core.TileBuildCraft;
+import buildcraft.core.inventory.InvUtils;
+import buildcraft.core.inventory.InventoryConcatenator;
+import buildcraft.core.inventory.InventoryIterator;
+import buildcraft.core.inventory.SimpleInventory;
+import buildcraft.core.inventory.StackHelper;
+import buildcraft.core.proxy.CoreProxy;
+import buildcraft.core.utils.CraftingHelper;
+import buildcraft.core.utils.Utils;
 
 public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory {
 
@@ -37,14 +41,18 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 	public static final int CRAFT_TIME = 256;
 	public static final int UPDATE_TIME = 16;
 	private static final int[] SLOTS = Utils.createSlotArray(0, 10);
-	private SimpleInventory resultInv = new SimpleInventory(1, "Auto Workbench", 64);
+
 	public InventoryCrafting craftMatrix = new LocalInventoryCrafting();
-	private IInventory inv = InventoryConcatenator.make().add(resultInv).add(craftMatrix);
 	public boolean useLast;
-	private EntityPlayer internalPlayer;
+	public int progress;
+
+	private SimpleInventory resultInv = new SimpleInventory(1, "Auto Workbench", 64);
+
+	private IInventory inv = InventoryConcatenator.make().add(resultInv).add(craftMatrix);
+
 	private SlotCrafting craftSlot;
 	private InventoryCraftResult craftResult = new InventoryCraftResult();
-	public int progress;
+
 	private int update = Utils.RANDOM.nextInt();
 
 	private class LocalInventoryCrafting extends InventoryCrafting {
@@ -59,28 +67,8 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 		}
 	}
 
-	private final class InternalPlayer extends EntityPlayer {
-
-		public InternalPlayer() {
-			super(TileAutoWorkbench.this.worldObj, "[BuildCraft]");
-			posX = TileAutoWorkbench.this.xCoord;
-			posY = TileAutoWorkbench.this.yCoord + 1;
-			posZ = TileAutoWorkbench.this.zCoord;
-		}
-
-		@Override
-		public void sendChatToPlayer(ChatMessageComponent var1) {
-		}
-
-		@Override
-		public boolean canCommandSenderUseCommand(int var1, String var2) {
-			return false;
-		}
-
-		@Override
-		public ChunkCoordinates getPlayerCoordinates() {
-			return null;
-		}
+	public WeakReference<EntityPlayer> getInternalPlayer() {
+		return CoreProxy.proxy.getBuildCraftPlayer((WorldServer) worldObj, xCoord, yCoord + 1, zCoord);
 	}
 
 	@Override
@@ -109,7 +97,7 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 	}
 
 	@Override
-	public String getInvName() {
+	public String getInventoryName() {
 		return "";
 	}
 
@@ -120,19 +108,19 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 
 	@Override
 	public boolean isUseableByPlayer(EntityPlayer player) {
-		return worldObj.getBlockTileEntity(xCoord, yCoord, zCoord) == this && player.getDistanceSq(xCoord + 0.5D, yCoord + 0.5D, zCoord + 0.5D) <= 64.0D;
+		return worldObj.getTileEntity(xCoord, yCoord, zCoord) == this && player.getDistanceSq(xCoord + 0.5D, yCoord + 0.5D, zCoord + 0.5D) <= 64.0D;
 	}
 
 	@Override
 	public void readFromNBT(NBTTagCompound data) {
 		super.readFromNBT(data);
 		resultInv.readFromNBT(data);
-		Utils.readInvFromNBT(craftMatrix, "matrix", data);
+		InvUtils.readInvFromNBT(craftMatrix, "matrix", data);
 
 		// Legacy Code
 		if (data.hasKey("stackList")) {
 			ItemStack[] stacks = new ItemStack[9];
-			Utils.readStacksFromNBT(data, "stackList", stacks);
+			InvUtils.readStacksFromNBT(data, "stackList", stacks);
 			for (int i = 0; i < 9; i++) {
 				craftMatrix.setInventorySlotContents(i, stacks[i]);
 			}
@@ -143,7 +131,7 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 	public void writeToNBT(NBTTagCompound data) {
 		super.writeToNBT(data);
 		resultInv.writeToNBT(data);
-		Utils.writeInvToNBT(craftMatrix, "matrix", data);
+		InvUtils.writeInvToNBT(craftMatrix, "matrix", data);
 	}
 
 	public ItemStack findRecipeOutput() {
@@ -167,7 +155,7 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 			if (!stack.isStackable()) {
 				return null;
 			}
-			if (stack.getItem().hasContainerItem()) {
+			if (stack.getItem().hasContainerItem(stack)) {
 				return null;
 			}
 		}
@@ -183,15 +171,15 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 	@Override
 	public void updateEntity() {
 		super.updateEntity();
-		if (CoreProxy.proxy.isRenderWorld(worldObj)) {
+
+		if (worldObj.isRemote) {
 			return;
 		}
 
 		balanceSlots();
 
 		if (craftSlot == null) {
-			internalPlayer = new InternalPlayer();
-			craftSlot = new SlotCrafting(internalPlayer, craftMatrix, craftResult, 0, 0, 0);
+			craftSlot = new SlotCrafting(getInternalPlayer().get(), craftMatrix, craftResult, 0, 0, 0);
 		}
 		if (resultInv.getStackInSlot(SLOT_RESULT) != null) {
 			return;
@@ -212,15 +200,18 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 	private void balanceSlots() {
 		for (IInvSlot slotA : InventoryIterator.getIterable(craftMatrix, ForgeDirection.UP)) {
 			ItemStack stackA = slotA.getStackInSlot();
-			if (stackA == null)
+			if (stackA == null) {
 				continue;
+			}
 			for (IInvSlot slotB : InventoryIterator.getIterable(craftMatrix, ForgeDirection.UP)) {
-				if (slotA.getIndex() == slotB.getIndex())
+				if (slotA.getIndex() == slotB.getIndex()) {
 					continue;
+				}
 				ItemStack stackB = slotB.getStackInSlot();
-				if (stackB == null)
+				if (stackB == null) {
 					continue;
-				if (StackHelper.instance().canStacksMerge(stackA, stackB)) {
+				}
+				if (StackHelper.canStacksMerge(stackA, stackB)) {
 					if (stackA.stackSize > stackB.stackSize + 1) {
 						stackA.stackSize--;
 						stackB.stackSize++;
@@ -255,11 +246,11 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 			return;
 		}
 		result = result.copy();
-		craftSlot.onPickupFromSlot(internalPlayer, result);
+		craftSlot.onPickupFromSlot(getInternalPlayer().get(), result);
 		resultInv.setInventorySlotContents(SLOT_RESULT, result);
 
 		// clean fake player inventory (crafting handler support)
-		for (IInvSlot slot : InventoryIterator.getIterable(internalPlayer.inventory, ForgeDirection.UP)) {
+		for (IInvSlot slot : InventoryIterator.getIterable(getInternalPlayer().get().inventory, ForgeDirection.UP)) {
 			ItemStack stack = slot.getStackInSlot();
 			if (stack != null) {
 				slot.setStackInSlot(null);
@@ -269,30 +260,30 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 	}
 
 	@Override
-	public void openChest() {
+	public void openInventory() {
 	}
 
 	@Override
-	public void closeChest() {
-	}
-
-	@Override
-	public boolean isInvNameLocalized() {
-		return false;
+	public void closeInventory() {
 	}
 
 	@Override
 	public boolean isItemValidForSlot(int slot, ItemStack stack) {
-		if (slot == SLOT_RESULT)
+		if (slot == SLOT_RESULT) {
 			return false;
-		if (stack == null)
+		}
+		if (stack == null) {
 			return false;
-		if (!stack.isStackable())
+		}
+		if (!stack.isStackable()) {
 			return false;
-		if (stack.getItem().hasContainerItem())
+		}
+		if (stack.getItem().hasContainerItem(stack)) {
 			return false;
-		if (getStackInSlot(slot) == null)
+		}
+		if (getStackInSlot(slot) == null) {
 			return false;
+		}
 		return true;
 	}
 
@@ -325,5 +316,10 @@ public class TileAutoWorkbench extends TileBuildCraft implements ISidedInventory
 			}
 		}
 		return minStackSize <= 1;
+	}
+
+	@Override
+	public boolean hasCustomInventoryName() {
+		return false;
 	}
 }

@@ -1,32 +1,33 @@
 /**
- * Copyright (c) SpaceToad, 2011
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
  *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
-
 package buildcraft.core;
 
-import buildcraft.core.utils.StringUtils;
+import net.minecraft.client.renderer.texture.IIconRegister;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.item.Item;
+import net.minecraft.world.World;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
-import net.minecraft.client.renderer.texture.IconRegister;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
 
 public class ItemBuildCraft extends Item {
 
 	private String iconName;
-	public ItemBuildCraft(int i) {
-		super(i);
-		setCreativeTab(CreativeTabBuildCraft.tabBuildCraft);
+	private boolean passSneakClick = false;
+
+	public ItemBuildCraft() {
+		this(CreativeTabBuildCraft.ITEMS);
 	}
 
-	@Override
-	public String getItemDisplayName(ItemStack itemstack) {
-		return StringUtils.localize(getUnlocalizedName(itemstack));
+	public ItemBuildCraft(CreativeTabBuildCraft creativeTab) {
+		super();
+
+		setCreativeTab(creativeTab.get());
 	}
 
 	@Override
@@ -36,9 +37,18 @@ public class ItemBuildCraft extends Item {
 	}
 
 	@Override
-    @SideOnly(Side.CLIENT)
-    public void registerIcons(IconRegister par1IconRegister)
-    {
-        this.itemIcon = par1IconRegister.registerIcon("buildcraft:" + iconName);
-    }
+	@SideOnly(Side.CLIENT)
+	public void registerIcons(IIconRegister par1IconRegister) {
+		this.itemIcon = par1IconRegister.registerIcon("buildcraft:" + iconName);
+	}
+
+	public Item setPassSneakClick(boolean passClick) {
+		this.passSneakClick = passClick;
+		return this;
+	}
+
+	@Override
+	public boolean doesSneakBypassUse(World world, int x, int y, int z, EntityPlayer player) {
+		return passSneakClick;
+	}
 }

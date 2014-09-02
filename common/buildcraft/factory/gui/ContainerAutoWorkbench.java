@@ -1,20 +1,13 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.factory.gui;
 
-import buildcraft.core.gui.BuildCraftContainer;
-import buildcraft.core.gui.slots.SlotOutput;
-import buildcraft.core.gui.slots.SlotUntouchable;
-import buildcraft.core.gui.slots.SlotWorkbench;
-import buildcraft.core.proxy.CoreProxy;
-import buildcraft.core.utils.StringUtils;
-import buildcraft.core.utils.Utils;
-import buildcraft.factory.TileAutoWorkbench;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.ICrafting;
@@ -24,10 +17,19 @@ import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.EnumChatFormatting;
 
+import buildcraft.core.gui.BuildCraftContainer;
+import buildcraft.core.gui.slots.SlotOutput;
+import buildcraft.core.gui.slots.SlotUntouchable;
+import buildcraft.core.gui.slots.SlotWorkbench;
+import buildcraft.core.inventory.InvUtils;
+import buildcraft.core.utils.StringUtils;
+import buildcraft.factory.TileAutoWorkbench;
+
 public class ContainerAutoWorkbench extends BuildCraftContainer {
 
-	private final TileAutoWorkbench tile;
 	public IInventory craftResult;
+
+	private final TileAutoWorkbench tile;
 	private int lastProgress;
 	private ItemStack prevOutput;
 
@@ -38,8 +40,8 @@ public class ContainerAutoWorkbench extends BuildCraftContainer {
 			@Override
 			public void setInventorySlotContents(int slot, ItemStack stack) {
 				super.setInventorySlotContents(slot, stack);
-				if (stack != null && tile.isLast() && CoreProxy.proxy.isRenderWorld(tile.worldObj)) {
-					Utils.addItemToolTip(stack, "tip", EnumChatFormatting.YELLOW + StringUtils.localize("gui.clickcraft"));
+				if (stack != null && tile.isLast() && tile.getWorldObj().isRemote) {
+					InvUtils.addItemToolTip(stack, EnumChatFormatting.YELLOW + StringUtils.localize("gui.clickcraft"));
 				}
 			}
 		};

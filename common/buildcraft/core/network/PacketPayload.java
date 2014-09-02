@@ -1,29 +1,36 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.core.network;
 
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import io.netty.buffer.ByteBuf;
 
-public abstract class PacketPayload {
+public class PacketPayload {
 
-	public static enum Type {
+	public ByteBuf stream;
+	private StreamWriter handler;
 
-		NULL, ARRAY, STREAM
+	public interface StreamWriter {
+		void writeData(ByteBuf data);
 	}
 
-	public static PacketPayload makePayload(int type) {
-		if (type == Type.ARRAY.ordinal())
-			return new PacketPayloadArrays();
-		if (type == Type.STREAM.ordinal())
-			return new PacketPayloadStream();
-		return null;
+	public PacketPayload() {
 	}
 
-	public abstract void writeData(DataOutputStream data) throws IOException;
+	public PacketPayload(StreamWriter handler) {
+		this.handler = handler;
+	}
 
-	public abstract void readData(DataInputStream data) throws IOException;
+	public void writeData(ByteBuf data) {
+		handler.writeData(data);
+	}
 
-	public abstract Type getType();
+	public void readData(ByteBuf data) {
+		stream = data;
+	}
 }

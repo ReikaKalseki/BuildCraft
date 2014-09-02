@@ -1,7 +1,24 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.factory;
 
-import buildcraft.BuildCraftCore;
+import java.lang.reflect.Method;
+
+import net.minecraft.util.IIcon;
+import net.minecraft.world.World;
+
+import cpw.mods.fml.client.registry.ClientRegistry;
+import cpw.mods.fml.client.registry.RenderingRegistry;
+
 import buildcraft.BuildCraftFactory;
+import buildcraft.api.core.BCLog;
+import buildcraft.builders.RenderBuilder;
 import buildcraft.core.EntityBlock;
 import buildcraft.core.render.RenderVoid;
 import buildcraft.core.render.RenderingEntityBlocks;
@@ -10,17 +27,12 @@ import buildcraft.factory.gui.GuiAutoCrafting;
 import buildcraft.factory.render.RenderHopper;
 import buildcraft.factory.render.RenderRefinery;
 import buildcraft.factory.render.RenderTank;
-import cpw.mods.fml.client.registry.ClientRegistry;
-import cpw.mods.fml.client.registry.RenderingRegistry;
-import java.lang.reflect.Method;
-import net.minecraft.util.Icon;
-import net.minecraft.world.World;
 
 public class FactoryProxyClient extends FactoryProxy {
 
-	public static Icon pumpTexture;
-	public static Icon drillTexture;
-	public static Icon drillHeadTexture;
+	public static IIcon pumpTexture;
+	public static IIcon drillTexture;
+	public static IIcon drillHeadTexture;
 
 	@Override
 	public void initializeTileEntities() {
@@ -40,6 +52,7 @@ public class FactoryProxyClient extends FactoryProxy {
 			RenderingEntityBlocks.blockByEntityRenders.put(new EntityRenderIndex(BuildCraftFactory.hopperBlock, 0), new RenderHopper());
 		}
 
+		ClientRegistry.bindTileEntitySpecialRenderer(TileQuarry.class, new RenderBuilder());
 	}
 
 	@Override
@@ -53,9 +66,9 @@ public class FactoryProxyClient extends FactoryProxy {
 			Class<?> neiRenderer = Class.forName("codechicken.nei.DefaultOverlayRenderer");
 			Method method = neiRenderer.getMethod("registerGuiOverlay", Class.class, String.class, int.class, int.class);
 			method.invoke(null, GuiAutoCrafting.class, "crafting", 5, 11);
-			BuildCraftCore.bcLog.fine("NEI detected, adding NEI overlay");
+			BCLog.logger.fine("NEI detected, adding NEI overlay");
 		} catch (Exception e) {
-			BuildCraftCore.bcLog.fine("NEI not detected.");
+			BCLog.logger.fine("NEI not detected.");
 		}
 	}
 

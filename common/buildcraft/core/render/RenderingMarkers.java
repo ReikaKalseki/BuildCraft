@@ -1,14 +1,30 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.core.render;
 
-import buildcraft.BuildCraftCore;
-import cpw.mods.fml.client.registry.ISimpleBlockRenderingHandler;
 import net.minecraft.block.Block;
 import net.minecraft.client.renderer.RenderBlocks;
 import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.util.Icon;
+import net.minecraft.util.IIcon;
 import net.minecraft.world.IBlockAccess;
 
+import cpw.mods.fml.client.registry.ISimpleBlockRenderingHandler;
+
+import buildcraft.BuildCraftCore;
+
 public class RenderingMarkers implements ISimpleBlockRenderingHandler {
+
+	/* PATH MARKER RENDERING */
+	public static final double[][][] frontX = new double[6][3][4];
+	public static final double[][][] frontZ = new double[6][3][4];
+	public static final double[][][] frontY = new double[6][3][4];
+	public static final int[] metaToOld = new int[6];
 
 	public RenderingMarkers() {
 		initializeMarkerMatrix();
@@ -20,12 +36,13 @@ public class RenderingMarkers implements ISimpleBlockRenderingHandler {
 
 	@Override
 	public boolean renderWorldBlock(IBlockAccess world, int x, int y, int z, Block block, int modelId, RenderBlocks renderer) {
-
 		Tessellator tessellator = Tessellator.instance;
-		float f = block.getBlockBrightness(world, x, y, z);
-		if (Block.lightValue[block.blockID] > 0) {
+		float f = block.getMixedBrightnessForBlock(world, x, y, z);
+
+		if (block.getLightValue() > 0) {
 			f = 1.0F;
 		}
+
 		tessellator.setColorOpaque_F(f, f, f);
 		renderMarkerWithMeta(world, block, x, y, z, world.getBlockMetadata(x, y, z));
 
@@ -33,7 +50,7 @@ public class RenderingMarkers implements ISimpleBlockRenderingHandler {
 	}
 
 	@Override
-	public boolean shouldRender3DInInventory() {
+	public boolean shouldRender3DInInventory(int modelId) {
 		return false;
 	}
 
@@ -42,14 +59,8 @@ public class RenderingMarkers implements ISimpleBlockRenderingHandler {
 		return BuildCraftCore.markerModel;
 	}
 
-	/* PATH MARKER RENDERING */
-	public static final double frontX[][][] = new double[6][3][4];
-	public static final double frontZ[][][] = new double[6][3][4];
-	public static final double frontY[][][] = new double[6][3][4];
-	public static final int metaToOld[] = new int[6];
-
 	public static double[][] safeClone(double[][] d) {
-		double ret[][] = new double[d.length][d[0].length];
+		double[][] ret = new double[d.length][d[0].length];
 
 		for (int i = 0; i < d.length; ++i) {
 			for (int j = 0; j < d[0].length; ++j) {
@@ -67,8 +78,8 @@ public class RenderingMarkers implements ISimpleBlockRenderingHandler {
 		metaToOld[3] = 3;
 		metaToOld[4] = 2;
 		metaToOld[5] = 1;
-		
-		double frontXBase[][] = { { -0.0625, -0.0625, -0.0625, -0.0625 }, { 1, 0, 0, 1 }, { -0.5, -0.5, 0.5, 0.5 } };
+
+		double[][] frontXBase = { {-0.0625, -0.0625, -0.0625, -0.0625}, {1, 0, 0, 1}, {-0.5, -0.5, 0.5, 0.5}};
 
 		frontX[3] = safeClone(frontXBase);
 		rotateFace(frontX[3]);
@@ -84,7 +95,7 @@ public class RenderingMarkers implements ISimpleBlockRenderingHandler {
 		rotateFace(frontX[0]);
 		rotateFace(frontX[0]);
 
-		double frontZBase[][] = { { -0.5, -0.5, 0.5, 0.5 }, { 1, 0, 0, 1 }, { 0.0625, 0.0625, 0.0625, 0.0625 } };
+		double[][] frontZBase = {{-0.5, -0.5, 0.5, 0.5}, {1, 0, 0, 1}, {0.0625, 0.0625, 0.0625, 0.0625}};
 
 		frontZ[5] = safeClone(frontZBase);
 
@@ -100,7 +111,7 @@ public class RenderingMarkers implements ISimpleBlockRenderingHandler {
 		rotateFace(frontZ[0]);
 		rotateFace(frontZ[0]);
 
-		double frontYBase[][] = { { -0.5, -0.5, 0.5, 0.5 }, { -0.0625, -0.0625, -0.0625, -0.0625 }, { 0.5, -0.5, -0.5, 0.5 } };
+		double[][] frontYBase = {{-0.5, -0.5, 0.5, 0.5}, {-0.0625, -0.0625, -0.0625, -0.0625}, {0.5, -0.5, -0.5, 0.5}};
 
 		frontY[4] = safeClone(frontYBase);
 		rotateFace(frontY[4]);
@@ -118,29 +129,37 @@ public class RenderingMarkers implements ISimpleBlockRenderingHandler {
 
 	}
 
-	public void renderMarkerWithMeta(IBlockAccess iblockaccess, Block block, double x, double y, double z, int meta) {
+	public void renderMarkerWithMeta(IBlockAccess iblockaccess, Block block, double xi, double yi, double zi, int meta) {
 		Tessellator tessellator = Tessellator.instance;
+		int metadata = meta;
+
+		if (metadata > 5 || metadata < 0) {
+			metadata = 1;
+		}
+
+		double x = xi;
+		double y = yi;
+		double z = zi;
 
 		int xCoord = (int) x;
 		int yCoord = (int) y;
 		int zCoord = (int) z;
 
-		Icon i = block.getBlockTexture(iblockaccess, xCoord, yCoord, zCoord, 1);
+		IIcon i = block.getIcon(iblockaccess, xCoord, yCoord, zCoord, 1);
 
-		int m = metaToOld[meta];
+		int m = metaToOld[metadata];
 		x += 0.5D;
 		z += 0.5D;
-		
-		double minU = (double)i.getInterpolatedU(7);
-		double minV = (double)i.getInterpolatedV(7);
-		double maxU = (double)i.getInterpolatedU(9);
-		double maxV = (double)i.getInterpolatedV(9);
-		
+
+		double minU = i.getInterpolatedU(7);
+		double minV = i.getInterpolatedV(7);
+		double maxU = i.getInterpolatedU(9);
+		double maxV = i.getInterpolatedV(9);
 
 		tessellator.setBrightness(block.getMixedBrightnessForBlock(iblockaccess, xCoord, yCoord, zCoord));
 
 		double s = 1F / 16F;
-		
+
 		if (m == 5) {
 			tessellator.addVertexWithUV(x - s, y + 0.5 + s, z - s, minU, minV);
 			tessellator.addVertexWithUV(x - s, y + 0.5 + s, z + s, minU, maxV);
@@ -172,11 +191,9 @@ public class RenderingMarkers implements ISimpleBlockRenderingHandler {
 			tessellator.addVertexWithUV(x + s, y + 0.5 - s, z - s, minU, maxV);
 			tessellator.addVertexWithUV(x - s, y + 0.5 - s, z - s, minU, minV);
 		}
-		
-		i = block.getBlockTexture(iblockaccess, xCoord, yCoord, zCoord, 0);
 
-		
-		
+		i = block.getIcon(iblockaccess, xCoord, yCoord, zCoord, 0);
+
 		minU = i.getMinU();
 		maxU = i.getMaxU();
 		minV = i.getMinV();
@@ -228,5 +245,4 @@ public class RenderingMarkers implements ISimpleBlockRenderingHandler {
 			face[j][3] = tmp;
 		}
 	}
-
 }

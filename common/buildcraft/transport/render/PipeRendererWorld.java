@@ -1,324 +1,130 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.transport.render;
+
+import net.minecraft.block.Block;
+import net.minecraft.client.renderer.RenderBlocks;
+import net.minecraft.init.Blocks;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.world.IBlockAccess;
+
+import cpw.mods.fml.client.registry.ISimpleBlockRenderingHandler;
+
+import net.minecraftforge.common.util.ForgeDirection;
 
 import buildcraft.BuildCraftTransport;
 import buildcraft.api.core.IIconProvider;
-import buildcraft.core.utils.Utils;
+import buildcraft.core.CoreConstants;
+import buildcraft.core.utils.MatrixTranformations;
 import buildcraft.transport.BlockGenericPipe;
-import buildcraft.transport.IPipeRenderState;
 import buildcraft.transport.PipeIconProvider;
 import buildcraft.transport.PipeRenderState;
+import buildcraft.transport.TileGenericPipe;
 import buildcraft.transport.TransportProxy;
-import cpw.mods.fml.client.registry.ISimpleBlockRenderingHandler;
-import net.minecraft.block.Block;
-import net.minecraft.client.renderer.RenderBlocks;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Icon;
-import net.minecraft.world.IBlockAccess;
-import net.minecraftforge.common.ForgeDirection;
 
 public class PipeRendererWorld implements ISimpleBlockRenderingHandler {
 
-	public static final float facadeThickness = 1F / 16F;
+	public static int renderPass = -1;
 
-	/**
-	 * Mirrors the array on the Y axis by calculating offsets from 0.5F
-	 *
-	 * @param targetArray
-	 */
-	private void mirrorY(float[][] targetArray) {
-		float temp = targetArray[1][0];
-		targetArray[1][0] = (targetArray[1][1] - 0.5F) * -1F + 0.5F; // 1 -> 0.5F -> -0.5F -> 0F
-		targetArray[1][1] = (temp - 0.5F) * -1F + 0.5F; // 0 -> -0.5F -> 0.5F -> 1F
-	}
-
-	/**
-	 * Shifts the coordinates around effectivly rotating something. Zero state
-	 * is DOWN then -> NORTH -> WEST Note - To obtain Pos, do a mirrorY() before
-	 * rotating
-	 *
-	 * @param targetArray the array that should be rotated
-	 */
-	private void rotate(float[][] targetArray) {
-		for (int i = 0; i < 2; i++) {
-			float temp = targetArray[2][i];
-			targetArray[2][i] = targetArray[1][i];
-			targetArray[1][i] = targetArray[0][i];
-			targetArray[0][i] = temp;
-		}
-	}
-
-	/**
-	 * @param targetArray the array that should be transformed
-	 * @param direction
-	 */
-	private void transform(float[][] targetArray, ForgeDirection direction) {
-		if ((direction.ordinal() & 0x1) == 1) {
-			mirrorY(targetArray);
-		}
-
-		for (int i = 0; i < (direction.ordinal() >> 1); i++) {
-			rotate(targetArray);
-		}
-	}
-
-	/**
-	 * Clones both dimensions of a float[][]
-	 *
-	 * @param source the float[][] to deepClone
-	 * @return
-	 */
-	private float[][] deepClone(float[][] source) {
-		float[][] target = source.clone();
-		for (int i = 0; i < target.length; i++) {
-			target[i] = source[i].clone();
-		}
-		return target;
-	}
-
-	private void renderAllFaceExeptAxe(RenderBlocks renderblocks, BlockGenericPipe block, Icon icon, int x, int y, int z, char axe) {
-		float minX = (float) renderblocks.renderMinX;
-		float minY = (float) renderblocks.renderMinY;
-		float minZ = (float) renderblocks.renderMinZ;
-		float maxX = (float) renderblocks.renderMaxX;
-		float maxY = (float) renderblocks.renderMaxY;
-		float maxZ = (float) renderblocks.renderMaxZ;
-		if (axe != 'x') {
-			renderTwoWayXFace(renderblocks, block, icon, x, y, z, minY, minZ, maxY, maxZ, minX);
-			renderTwoWayXFace(renderblocks, block, icon, x, y, z, minY, minZ, maxY, maxZ, maxX);
-		}
-		if (axe != 'y') {
-			renderTwoWayYFace(renderblocks, block, icon, x, y, z, minX, minZ, maxX, maxZ, minY);
-			renderTwoWayYFace(renderblocks, block, icon, x, y, z, minX, minZ, maxX, maxZ, maxY);
-		}
-		if (axe != 'z') {
-			renderTwoWayZFace(renderblocks, block, icon, x, y, z, minX, minY, maxX, maxY, minZ);
-			renderTwoWayZFace(renderblocks, block, icon, x, y, z, minX, minY, maxX, maxY, maxZ);
-		}
-	}
-
-	private void renderTwoWayXFace(RenderBlocks renderblocks, BlockGenericPipe block, Icon icon, int xCoord, int yCoord, int zCoord, float minY, float minZ, float maxY, float maxZ, float x) {
-		renderblocks.setRenderBounds(x, minY, minZ, x, maxY, maxZ);
-		block.setRenderAxis('x');
-		renderblocks.renderStandardBlock(block, xCoord, yCoord, zCoord);
-		block.setRenderAxis('a');
-	}
-
-	private void renderTwoWayYFace(RenderBlocks renderblocks, BlockGenericPipe block, Icon icon, int xCoord, int yCoord, int zCoord, float minX, float minZ, float maxX, float maxZ, float y) {
-		renderblocks.setRenderBounds(minX, y, minZ, maxX, y, maxZ);
-		block.setRenderAxis('y');
-		renderblocks.renderStandardBlock(block, xCoord, yCoord, zCoord);
-		block.setRenderAxis('a');
-	}
-
-	private void renderTwoWayZFace(RenderBlocks renderblocks, BlockGenericPipe block, Icon icon, int xCoord, int yCoord, int zCoord, float minX, float minY, float maxX, float maxY, float z) {
-		renderblocks.setRenderBounds(minX, minY, z, maxX, maxY, z);
-		block.setRenderAxis('z');
-		renderblocks.renderStandardBlock(block, xCoord, yCoord, zCoord);
-		block.setRenderAxis('a');
-	}
-
-	public void renderPipe(RenderBlocks renderblocks, IBlockAccess iblockaccess, BlockGenericPipe block, IPipeRenderState renderState, int x, int y, int z) {
-
-		float minSize = Utils.pipeMinPos;
-		float maxSize = Utils.pipeMaxPos;
-
-		PipeRenderState state = renderState.getRenderState();
-		IIconProvider icons = renderState.getPipeIcons();
-		if (icons == null)
+	public void renderPipe(RenderBlocks renderblocks, IBlockAccess iblockaccess, BlockGenericPipe block, TileGenericPipe tile, int x, int y, int z) {
+		PipeRenderState state = tile.renderState;
+		IIconProvider icons = tile.getPipeIcons();
+		
+		if (icons == null) {
 			return;
-
-		boolean west = false;
-		boolean east = false;
-		boolean down = false;
-		boolean up = false;
-		boolean north = false;
-		boolean south = false;
-
-		if (state.pipeConnectionMatrix.isConnected(ForgeDirection.WEST)) {
-			state.currentTexture = icons.getIcon(state.textureMatrix.getTextureIndex(ForgeDirection.WEST));
-			renderblocks.setRenderBounds(0.0F, minSize, minSize, minSize, maxSize, maxSize);
-			renderAllFaceExeptAxe(renderblocks, block, state.currentTexture, x, y, z, 'x');
-			west = true;
 		}
 
-		if (state.pipeConnectionMatrix.isConnected(ForgeDirection.EAST)) {
-			state.currentTexture = icons.getIcon(state.textureMatrix.getTextureIndex(ForgeDirection.EAST));
-			renderblocks.setRenderBounds(maxSize, minSize, minSize, 1.0F, maxSize, maxSize);
-			renderAllFaceExeptAxe(renderblocks, block, state.currentTexture, x, y, z, 'x');
-			east = true;
-		}
+		// Force pipe render into pass 0
+		if (renderPass == 0) {
+			int connectivity = state.pipeConnectionMatrix.getMask();
+			float[] dim = new float[6];
 
-		if (state.pipeConnectionMatrix.isConnected(ForgeDirection.DOWN)) {
-			state.currentTexture = icons.getIcon(state.textureMatrix.getTextureIndex(ForgeDirection.DOWN));
-			renderblocks.setRenderBounds(minSize, 0.0F, minSize, maxSize, minSize, maxSize);
-			renderAllFaceExeptAxe(renderblocks, block, state.currentTexture, x, y, z, 'y');
-			down = true;
-		}
+			// render the unconnected pipe faces of the center block (if any)
 
-		if (state.pipeConnectionMatrix.isConnected(ForgeDirection.UP)) {
-			state.currentTexture = icons.getIcon(state.textureMatrix.getTextureIndex(ForgeDirection.UP));
-			renderblocks.setRenderBounds(minSize, maxSize, minSize, maxSize, 1.0F, maxSize);
-			renderAllFaceExeptAxe(renderblocks, block, state.currentTexture, x, y, z, 'y');
-			up = true;
-		}
+			if (connectivity != 0x3f) { // note: 0x3f = 0x111111 = all sides
+				resetToCenterDimensions(dim);
 
-		if (state.pipeConnectionMatrix.isConnected(ForgeDirection.NORTH)) {
-			state.currentTexture = icons.getIcon(state.textureMatrix.getTextureIndex(ForgeDirection.NORTH));
-			renderblocks.setRenderBounds(minSize, minSize, 0.0F, maxSize, maxSize, minSize);
-			renderAllFaceExeptAxe(renderblocks, block, state.currentTexture, x, y, z, 'z');
-			north = true;
-		}
+				state.currentTexture = icons.getIcon(state.textureMatrix.getTextureIndex(ForgeDirection.UNKNOWN));
+				renderTwoWayBlock(renderblocks, block, x, y, z, dim, connectivity ^ 0x3f);
+			}
 
-		if (state.pipeConnectionMatrix.isConnected(ForgeDirection.SOUTH)) {
-			state.currentTexture = icons.getIcon(state.textureMatrix.getTextureIndex(ForgeDirection.SOUTH));
-			renderblocks.setRenderBounds(minSize, minSize, maxSize, maxSize, maxSize, 1.0F);
-			renderAllFaceExeptAxe(renderblocks, block, state.currentTexture, x, y, z, 'z');
-			south = true;
-		}
+			// render the connecting pipe faces
 
-		state.currentTexture = icons.getIcon(state.textureMatrix.getTextureIndex(ForgeDirection.UNKNOWN));
-		renderblocks.setRenderBounds(minSize, minSize, minSize, maxSize, maxSize, maxSize);
-		if (!west)
-			renderTwoWayXFace(renderblocks, block, state.currentTexture, x, y, z, minSize, minSize, maxSize, maxSize, minSize);
-		if (!east)
-			renderTwoWayXFace(renderblocks, block, state.currentTexture, x, y, z, minSize, minSize, maxSize, maxSize, maxSize);
-		if (!down)
-			renderTwoWayYFace(renderblocks, block, state.currentTexture, x, y, z, minSize, minSize, maxSize, maxSize, minSize);
-		if (!up)
-			renderTwoWayYFace(renderblocks, block, state.currentTexture, x, y, z, minSize, minSize, maxSize, maxSize, maxSize);
-		if (!north)
-			renderTwoWayZFace(renderblocks, block, state.currentTexture, x, y, z, minSize, minSize, maxSize, maxSize, minSize);
-		if (!south)
-			renderTwoWayZFace(renderblocks, block, state.currentTexture, x, y, z, minSize, minSize, maxSize, maxSize, maxSize);
+			for (int dir = 0; dir < 6; dir++) {
+				int mask = 1 << dir;
+
+				if ((connectivity & mask) == 0) {
+					continue; // no connection towards dir
+				}
+
+				// center piece offsets
+				resetToCenterDimensions(dim);
+
+				// extend block towards dir as it's connected to there
+				dim[dir / 2] = dir % 2 == 0 ? 0 : CoreConstants.PIPE_MAX_POS;
+				dim[dir / 2 + 3] = dir % 2 == 0 ? CoreConstants.PIPE_MIN_POS : 1;
+
+				// the mask points to all faces perpendicular to dir, i.e. dirs 0+1 -> mask 111100, 1+2 -> 110011, 3+5 -> 001111
+				int renderMask = (3 << (dir / 2 * 2)) ^ 0x3f;
+
+				// render sub block
+				state.currentTexture = icons.getIcon(state.textureMatrix.getTextureIndex(ForgeDirection.VALID_DIRECTIONS[dir]));
+
+				renderTwoWayBlock(renderblocks, block, x, y, z, dim, renderMask);
+			}
+		}
 
 		renderblocks.setRenderBounds(0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F);
 
+		// Facade renderer handles rendering in both passes
 		pipeFacadeRenderer(renderblocks, block, state, x, y, z);
-		pipePlugRenderer(renderblocks, block, state, x, y, z);
 
+		// Force other opaque renders into pass 0
+		if (renderPass == 0) {
+			pipePlugRenderer(renderblocks, block, state, x, y, z);
+			pipeRobotStationRenderer(renderblocks, block, state, x, y, z);
+		}
 	}
 
-	private void pipeFacadeRenderer(RenderBlocks renderblocks, Block block, PipeRenderState state, int x, int y, int z) {
-
-		float zFightOffset = 1F / 4096F;
-
-		float[][] zeroState = new float[3][2];
-		// X START - END
-		zeroState[0][0] = 0.0F - zFightOffset / 2;
-		zeroState[0][1] = 1.0F + zFightOffset / 2;
-		// Y START - END
-		zeroState[1][0] = 0.0F - zFightOffset;
-		zeroState[1][1] = facadeThickness;
-		// Z START - END
-		zeroState[2][0] = 0.0F;
-		zeroState[2][1] = 1.0F;
-
-		for (ForgeDirection direction : ForgeDirection.VALID_DIRECTIONS) {
-			int facadeId = state.facadeMatrix.getFacadeBlockId(direction);
-			if (facadeId != 0) {
-				Block renderBlock = Block.blocksList[facadeId];
-				int renderMeta = state.facadeMatrix.getFacadeMetaId(direction);
-				state.currentTexture = renderBlock.getIcon(direction.ordinal(), renderMeta);
-
-				try {
-					BlockGenericPipe.facadeRenderColor = Item.itemsList[state.facadeMatrix.getFacadeBlockId(direction)].getColorFromItemStack(new ItemStack(facadeId, 1, renderMeta), 0);
-				} catch (Throwable error) {
-				}
-
-				if (renderBlock.getRenderType() == 31) {
-					if ((renderMeta & 12) == 4) {
-						renderblocks.uvRotateEast = 1;
-						renderblocks.uvRotateWest = 1;
-						renderblocks.uvRotateTop = 1;
-						renderblocks.uvRotateBottom = 1;
-					} else if ((renderMeta & 12) == 8) {
-						renderblocks.uvRotateSouth = 1;
-						renderblocks.uvRotateNorth = 1;
-					}
-				}
-
-				// Hollow facade
-				if (state.pipeConnectionMatrix.isConnected(direction)) {
-					float[][] rotated = deepClone(zeroState);
-					rotated[2][0] = 0.0F;
-					rotated[2][1] = Utils.pipeMinPos - zFightOffset;
-					rotated[1][0] -= zFightOffset / 2;
-					transform(rotated, direction);
-					renderblocks.setRenderBounds(rotated[0][0], rotated[1][0], rotated[2][0], rotated[0][1], rotated[1][1], rotated[2][1]);
-					renderblocks.renderStandardBlock(block, x, y, z);
-
-					rotated = deepClone(zeroState);
-					rotated[2][0] = Utils.pipeMaxPos + zFightOffset;
-					rotated[1][0] -= zFightOffset / 2;
-					transform(rotated, direction);
-					renderblocks.setRenderBounds(rotated[0][0], rotated[1][0], rotated[2][0], rotated[0][1], rotated[1][1], rotated[2][1]);
-					renderblocks.renderStandardBlock(block, x, y, z);
-
-					rotated = deepClone(zeroState);
-					rotated[0][0] = 0.0F;
-					rotated[0][1] = Utils.pipeMinPos - zFightOffset;
-					rotated[1][1] -= zFightOffset;
-					transform(rotated, direction);
-					renderblocks.setRenderBounds(rotated[0][0], rotated[1][0], rotated[2][0], rotated[0][1], rotated[1][1], rotated[2][1]);
-					renderblocks.renderStandardBlock(block, x, y, z);
-
-					rotated = deepClone(zeroState);
-					rotated[0][0] = Utils.pipeMaxPos + zFightOffset;
-					rotated[0][1] = 1F;
-					rotated[1][1] -= zFightOffset;
-					transform(rotated, direction);
-					renderblocks.setRenderBounds(rotated[0][0], rotated[1][0], rotated[2][0], rotated[0][1], rotated[1][1], rotated[2][1]);
-					renderblocks.renderStandardBlock(block, x, y, z);
-				} else { // Solid facade
-					float[][] rotated = deepClone(zeroState);
-					transform(rotated, direction);
-					renderblocks.setRenderBounds(rotated[0][0], rotated[1][0], rotated[2][0], rotated[0][1], rotated[1][1], rotated[2][1]);
-					renderblocks.renderStandardBlock(block, x, y, z);
-				}
-
-				if (renderBlock.getRenderType() == 31) {
-					renderblocks.uvRotateSouth = 0;
-					renderblocks.uvRotateEast = 0;
-					renderblocks.uvRotateWest = 0;
-					renderblocks.uvRotateNorth = 0;
-					renderblocks.uvRotateTop = 0;
-					renderblocks.uvRotateBottom = 0;
-				}
-			}
-
-			BlockGenericPipe.facadeRenderColor = -1;
+	private void resetToCenterDimensions(float[] dim) {
+		for (int i = 0; i < 3; i++) {
+			dim[i] = CoreConstants.PIPE_MIN_POS;
 		}
-
-		// X START - END
-		zeroState[0][0] = Utils.pipeMinPos;
-		zeroState[0][1] = Utils.pipeMaxPos;
-		// Y START - END
-		zeroState[1][0] = facadeThickness;
-		zeroState[1][1] = Utils.pipeMinPos;
-		// Z START - END
-		zeroState[2][0] = Utils.pipeMinPos;
-		zeroState[2][1] = Utils.pipeMaxPos;
-
-		state.currentTexture = BuildCraftTransport.instance.pipeIconProvider.getIcon(PipeIconProvider.TYPE.PipeStructureCobblestone.ordinal()); // Structure Pipe
-
-		for (ForgeDirection direction : ForgeDirection.VALID_DIRECTIONS) {
-			if (state.facadeMatrix.getFacadeBlockId(direction) != 0 && !state.pipeConnectionMatrix.isConnected(direction)) {
-				float[][] rotated = deepClone(zeroState);
-				transform(rotated, direction);
-
-				renderblocks.setRenderBounds(rotated[0][0], rotated[1][0], rotated[2][0], rotated[0][1], rotated[1][1], rotated[2][1]);
-				renderblocks.renderStandardBlock(block, x, y, z);
-			}
+		
+		for (int i = 3; i < 6; i++) {
+			dim[i] = CoreConstants.PIPE_MAX_POS;
 		}
+	}
+
+	/**
+	 * Render a block with normal and inverted vertex order so back face culling
+	 * doesn't have any effect.
+	 */
+	private void renderTwoWayBlock(RenderBlocks renderblocks, BlockGenericPipe block, int x, int y, int z, float[] dim, int mask) {
+		assert mask != 0;
+
+		block.setRenderMask(mask);
+		renderblocks.setRenderBounds(dim[2], dim[0], dim[1], dim[5], dim[3], dim[4]);
+		renderblocks.renderStandardBlock(block, x, y, z);
+		block.setRenderMask((mask & 0x15) << 1 | (mask & 0x2a) >> 1); // pairwise swapped mask
+		renderblocks.setRenderBounds(dim[5], dim[3], dim[4], dim[2], dim[0], dim[1]);
+		renderblocks.renderStandardBlock(block, x, y, z);
+	}
+
+	private void pipeFacadeRenderer(RenderBlocks renderblocks, BlockGenericPipe block, PipeRenderState state, int x, int y, int z) {
+		FacadeRenderHelper.pipeFacadeRenderer(renderblocks, block, state, x, y, z);
 	}
 
 	private void pipePlugRenderer(RenderBlocks renderblocks, Block block, PipeRenderState state, int x, int y, int z) {
-
 		float zFightOffset = 1F / 4096F;
-
 		float[][] zeroState = new float[3][2];
+		
 		// X START - END
 		zeroState[0][0] = 0.25F + zFightOffset;
 		zeroState[0][1] = 0.75F - zFightOffset;
@@ -333,8 +139,8 @@ public class PipeRendererWorld implements ISimpleBlockRenderingHandler {
 
 		for (ForgeDirection direction : ForgeDirection.VALID_DIRECTIONS) {
 			if (state.plugMatrix.isConnected(direction)) {
-				float[][] rotated = deepClone(zeroState);
-				transform(rotated, direction);
+				float[][] rotated = MatrixTranformations.deepClone(zeroState);
+				MatrixTranformations.transform(rotated, direction);
 
 				renderblocks.setRenderBounds(rotated[0][0], rotated[1][0], rotated[2][0], rotated[0][1], rotated[1][1], rotated[2][1]);
 				renderblocks.renderStandardBlock(block, x, y, z);
@@ -355,14 +161,112 @@ public class PipeRendererWorld implements ISimpleBlockRenderingHandler {
 
 		for (ForgeDirection direction : ForgeDirection.VALID_DIRECTIONS) {
 			if (state.plugMatrix.isConnected(direction)) {
-				float[][] rotated = deepClone(zeroState);
-				transform(rotated, direction);
+				float[][] rotated = MatrixTranformations.deepClone(zeroState);
+				MatrixTranformations.transform(rotated, direction);
 
 				renderblocks.setRenderBounds(rotated[0][0], rotated[1][0], rotated[2][0], rotated[0][1], rotated[1][1], rotated[2][1]);
 				renderblocks.renderStandardBlock(block, x, y, z);
 			}
 		}
 
+	}
+
+	private void pipeRobotStationPartRender(RenderBlocks renderblocks,
+			Block block, PipeRenderState state, int x, int y, int z,
+			float xStart, float xEnd, float yStart, float yEnd, float zStart,
+			float zEnd) {
+
+		float zFightOffset = 1F / 4096F;
+
+		float[][] zeroState = new float[3][2];
+		// X START - END
+		zeroState[0][0] = xStart + zFightOffset;
+		zeroState[0][1] = xEnd - zFightOffset;
+		// Y START - END
+		zeroState[1][0] = yStart;
+		zeroState[1][1] = yEnd;
+		// Z START - END
+		zeroState[2][0] = zStart + zFightOffset;
+		zeroState[2][1] = zEnd - zFightOffset;
+
+		state.currentTexture = BuildCraftTransport.instance.pipeIconProvider
+				.getIcon(PipeIconProvider.TYPE.PipeRobotStation.ordinal()); // Structure
+																			// Pipe
+
+		for (ForgeDirection direction : ForgeDirection.VALID_DIRECTIONS) {
+			if (state.robotStationMatrix.isConnected(direction)) {
+				float[][] rotated = MatrixTranformations.deepClone(zeroState);
+				MatrixTranformations.transform(rotated, direction);
+
+				renderblocks.setRenderBounds(rotated[0][0], rotated[1][0],
+						rotated[2][0], rotated[0][1], rotated[1][1],
+						rotated[2][1]);
+				renderblocks.renderStandardBlock(block, x, y, z);
+			}
+		}
+
+	}
+
+	private void pipeRobotStationRenderer(RenderBlocks renderblocks, Block block, PipeRenderState state, int x, int y, int z) {
+
+		float width = 0.075F;
+
+		pipeRobotStationPartRender (renderblocks, block, state, x, y, z,
+				0.45F, 0.55F,
+				0.0F, 0.224F,
+				0.45F, 0.55F);
+
+
+		/*pipeRobotStationPartRender (renderblocks, block, state, x, y, z,
+				0.25F, 0.75F,
+				0.025F, 0.224F,
+				0.25F, 0.25F + width);
+
+		pipeRobotStationPartRender (renderblocks, block, state, x, y, z,
+				0.25F, 0.75F,
+				0.025F, 0.224F,
+				0.75F - width, 0.75F);
+
+		pipeRobotStationPartRender (renderblocks, block, state, x, y, z,
+				0.25F, 0.25F + width,
+				0.025F, 0.224F,
+				0.25F + width, 0.75F - width);
+
+		pipeRobotStationPartRender (renderblocks, block, state, x, y, z,
+				0.75F - width, 0.75F,
+				0.025F, 0.224F,
+				0.25F + width, 0.75F - width);*/
+
+		float zFightOffset = 1F / 4096F;
+
+		float[][] zeroState = new float[3][2];
+
+
+		// X START - END
+		zeroState[0][0] = 0.25F + zFightOffset;
+		zeroState[0][1] = 0.75F - zFightOffset;
+		// Y START - END
+		zeroState[1][0] = 0.225F;
+		zeroState[1][1] = 0.251F;
+		// Z START - END
+		zeroState[2][0] = 0.25F + zFightOffset;
+		zeroState[2][1] = 0.75F - zFightOffset;
+
+		state.currentTexture = BuildCraftTransport.instance.pipeIconProvider
+				.getIcon(PipeIconProvider.TYPE.PipeRobotStation.ordinal()); // Structure
+																			// Pipe
+
+		for (ForgeDirection direction : ForgeDirection.VALID_DIRECTIONS) {
+			if (state.robotStationMatrix.isConnected(direction)) {
+				float[][] rotated = MatrixTranformations.deepClone(zeroState);
+				MatrixTranformations.transform(rotated, direction);
+
+				renderblocks.setRenderBounds(rotated[0][0], rotated[1][0],
+						rotated[2][0], rotated[0][1], rotated[1][1],
+						rotated[2][1]);
+				renderblocks.renderStandardBlock(block, x, y, z);
+			}
+		}
 	}
 
 	@Override
@@ -372,18 +276,24 @@ public class PipeRendererWorld implements ISimpleBlockRenderingHandler {
 
 	@Override
 	public boolean renderWorldBlock(IBlockAccess world, int x, int y, int z, Block block, int modelId, RenderBlocks renderer) {
-		TileEntity tile = world.getBlockTileEntity(x, y, z);
+		TileEntity tile = world.getTileEntity(x, y, z);
 
-		if (tile instanceof IPipeRenderState) {
-			IPipeRenderState pipeTile = (IPipeRenderState) tile;
+		// Here to prevent Minecraft from crashing when nothing renders on render pass zero
+		// This is likely a bug, and has been submitted as an issue to the Forge team
+		renderer.setRenderBounds(0, 0, 0, 0, 0, 0);
+		renderer.renderStandardBlock(Blocks.stone, x, y, z);
+		renderer.setRenderBoundsFromBlock(block);
+
+		if (tile instanceof TileGenericPipe) {
+			TileGenericPipe pipeTile = (TileGenericPipe) tile;
 			renderPipe(renderer, world, (BlockGenericPipe) block, pipeTile, x, y, z);
 		}
+		
 		return true;
 	}
 
 	@Override
-	public boolean shouldRender3DInInventory() {
-		// TODO Auto-generated method stub
+	public boolean shouldRender3DInInventory(int modelId) {
 		return false;
 	}
 

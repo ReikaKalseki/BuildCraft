@@ -1,23 +1,30 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.core.triggers;
 
-import buildcraft.api.gates.ITriggerParameter;
-import buildcraft.api.inventory.ISpecialInventory;
-import buildcraft.core.inventory.InventoryWrapper;
 import java.util.Locale;
+
 import net.minecraft.inventory.IInventory;
-import net.minecraft.inventory.ISidedInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraftforge.common.ForgeDirection;
 
-public class TriggerInventory extends BCTrigger {
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.api.core.IInvSlot;
+import buildcraft.api.gates.ITileTrigger;
+import buildcraft.api.gates.ITrigger;
+import buildcraft.api.gates.ITriggerParameter;
+import buildcraft.core.inventory.InventoryIterator;
+import buildcraft.core.inventory.StackHelper;
+import buildcraft.core.utils.StringUtils;
+
+public class TriggerInventory extends BCTrigger implements ITileTrigger {
 
 	public enum State {
 
@@ -25,32 +32,20 @@ public class TriggerInventory extends BCTrigger {
 	};
 	public State state;
 
-	public TriggerInventory(int legacyId, State state) {
-		super(legacyId, "buildcraft.inventory." + state.name().toLowerCase(Locale.ENGLISH));
+	public TriggerInventory(State state) {
+		super("buildcraft:inventory." + state.name().toLowerCase(Locale.ENGLISH), "buildcraft.inventory." + state.name().toLowerCase(Locale.ENGLISH));
 
 		this.state = state;
 	}
 
 	@Override
 	public boolean hasParameter() {
-		if (state == State.Contains || state == State.Space)
-			return true;
-		else
-			return false;
+		return state == State.Contains || state == State.Space;
 	}
 
 	@Override
 	public String getDescription() {
-		switch (state) {
-			case Empty:
-				return "Inventory Empty";
-			case Contains:
-				return "Items in Inventory";
-			case Space:
-				return "Space in Inventory";
-			default:
-				return "Inventory Full";
-		}
+		return StringUtils.localize("gate.trigger.inventory." + state.name().toLowerCase(Locale.ENGLISH));
 	}
 
 	@Override
@@ -58,57 +53,25 @@ public class TriggerInventory extends BCTrigger {
 		ItemStack searchedStack = null;
 
 		if (parameter != null) {
-			searchedStack = parameter.getItem();
-		}
-
-		if (tile instanceof ISpecialInventory) {
-			ISpecialInventory specialInventory = (ISpecialInventory) tile;
-			ItemStack[] itemStacks;
-			switch (state) {
-				case Contains:
-					itemStacks = specialInventory.extractItem(false, side, 1);
-					return itemStacks != null && itemStacks.length > 0 && itemStacks[0] != null && itemStacks[0].stackSize > 0 && (searchedStack == null || itemStacks[0].isItemEqual(searchedStack));
-				case Empty:
-					itemStacks = specialInventory.extractItem(false, side, 1);
-					return itemStacks == null || itemStacks.length == 0 || itemStacks[0] == null || itemStacks[0].stackSize == 0;
-				case Full:
-					break;
-				case Space:
-					if (searchedStack == null)
-						break;
-					int added = specialInventory.addItem(searchedStack, false, side);
-					return added > 0;
-			}
+			searchedStack = parameter.getItemStack();
 		}
 
 		if (tile instanceof IInventory) {
-			ISidedInventory inv = InventoryWrapper.getWrappedInventory(tile);
-			int invSize = inv.getSizeInventory();
-
-			if (invSize <= 0)
-				return false;
-
+			boolean hasSlots = false;
 			boolean foundItems = false;
 			boolean foundSpace = false;
 
-			for (int i : inv.getAccessibleSlotsFromSide(side.ordinal())) {
-				ItemStack stack = inv.getStackInSlot(i);
+			for (IInvSlot slot : InventoryIterator.getIterable((IInventory) tile, side)) {
+				hasSlots = true;
+				ItemStack stack = slot.getStackInSlot();
 
-				boolean slotEmpty = stack == null || stack.stackSize == 0;
+				foundItems |= stack != null && (searchedStack == null || StackHelper.canStacksMerge(stack, searchedStack));
+				foundSpace |= (stack == null || (StackHelper.canStacksMerge(stack, searchedStack) && stack.stackSize < stack.getMaxStackSize()))
+						&& (searchedStack == null || slot.canPutStackInSlot(searchedStack));
+			}
 
-				if (searchedStack == null) {
-					foundItems |= !slotEmpty;
-				} else if (!slotEmpty) {
-					foundItems |= stack.isItemEqual(searchedStack);
-				}
-
-				if (slotEmpty) {
-					foundSpace = true;
-				} else if (searchedStack != null) {
-					if (stack.stackSize < stack.getMaxStackSize() && stack.isItemEqual(searchedStack)) {
-						foundSpace = true;
-					}
-				}
+			if (!hasSlots) {
+				return false;
 			}
 
 			switch (state) {
@@ -138,5 +101,10 @@ public class TriggerInventory extends BCTrigger {
 			default:
 				return ActionTriggerIconProvider.Trigger_Inventory_Full;
 		}
+	}
+
+	@Override
+	public ITrigger rotateLeft() {
+		return this;
 	}
 }

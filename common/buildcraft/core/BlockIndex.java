@@ -1,14 +1,14 @@
 /**
- * Copyright (c) SpaceToad, 2011
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
  *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
-
 package buildcraft.core;
 
+import net.minecraft.block.Block;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.world.World;
 
@@ -32,7 +32,6 @@ public class BlockIndex implements Comparable<BlockIndex> {
 	}
 
 	public BlockIndex(NBTTagCompound c) {
-
 		this.x = c.getInteger("i");
 		this.y = c.getInteger("j");
 		this.z = c.getInteger("k");
@@ -44,31 +43,31 @@ public class BlockIndex implements Comparable<BlockIndex> {
 	@Override
 	public int compareTo(BlockIndex o) {
 
-		if (o.x < x)
+		if (o.x < x) {
 			return 1;
-		else if (o.x > x)
+		} else if (o.x > x) {
 			return -1;
-		else if (o.z < z)
+		} else if (o.z < z) {
 			return 1;
-		else if (o.z > z)
+		} else if (o.z > z) {
 			return -1;
-		else if (o.y < y)
+		} else if (o.y < y) {
 			return 1;
-		else if (o.y > y)
+		} else if (o.y > y) {
 			return -1;
-		else
+		} else {
 			return 0;
+		}
 	}
 
 	public void writeTo(NBTTagCompound c) {
-
 		c.setInteger("i", x);
 		c.setInteger("j", y);
 		c.setInteger("k", z);
 	}
 
-	public int getBlockId(World world) {
-		return world.getBlockId(x, y, z);
+	public Block getBlock(World world) {
+		return world.getBlock(x, y, z);
 	}
 
 	@Override

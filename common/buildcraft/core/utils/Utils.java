@@ -1,56 +1,72 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.core.utils;
 
-import buildcraft.BuildCraftCore;
-import buildcraft.api.core.IAreaProvider;
-import buildcraft.api.core.LaserKind;
-import buildcraft.api.core.Position;
-import buildcraft.api.transport.IPipeTile;
-import buildcraft.api.transport.IPipeTile.PipeType;
-import buildcraft.core.BlockIndex;
-import buildcraft.core.EntityBlock;
-import buildcraft.core.IDropControlInventory;
-import buildcraft.core.IFramePipeConnection;
-import buildcraft.core.TileBuildCraft;
-import buildcraft.core.inventory.ITransactor;
-import buildcraft.core.inventory.InvUtils;
-import buildcraft.core.inventory.Transactor;
-import buildcraft.core.network.ISynchronizedTile;
-import buildcraft.core.network.PacketUpdate;
-import buildcraft.core.proxy.CoreProxy;
-import buildcraft.energy.TileEngine;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+
 import net.minecraft.block.Block;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.inventory.IInventory;
-import net.minecraft.inventory.InventoryLargeChest;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.CompressedStreamTools;
+import net.minecraft.nbt.NBTSizeTracker;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.nbt.NBTTagList;
-import net.minecraft.nbt.NBTTagString;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.tileentity.TileEntityChest;
+import net.minecraft.util.MathHelper;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
-import net.minecraftforge.common.ForgeDirection;
 
-public class Utils {
+import cpw.mods.fml.common.network.internal.FMLProxyPacket;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.BuildCraftCore;
+import buildcraft.api.core.IAreaProvider;
+import buildcraft.api.core.Position;
+import buildcraft.api.transport.IPipeTile;
+import buildcraft.api.transport.IPipeTile.PipeType;
+import buildcraft.core.BlockIndex;
+import buildcraft.core.DefaultProps;
+import buildcraft.core.EntityBlock;
+import buildcraft.core.IDropControlInventory;
+import buildcraft.core.IFramePipeConnection;
+import buildcraft.core.LaserData;
+import buildcraft.core.LaserKind;
+import buildcraft.core.TileBuildCraft;
+import buildcraft.core.inventory.ITransactor;
+import buildcraft.core.inventory.InvUtils;
+import buildcraft.core.inventory.Transactor;
+import buildcraft.core.network.BuildCraftPacket;
+import buildcraft.core.network.ISynchronizedTile;
+import buildcraft.core.network.PacketUpdate;
+import buildcraft.core.proxy.CoreProxy;
+import buildcraft.energy.TileEngine;
+
+public final class Utils {
 
 	public static final Random RANDOM = new Random();
-	public static final float pipeMinPos = 0.25F;
-	public static final float pipeMaxPos = 0.75F;
-	public static float pipeNormalSpeed = 0.01F;
 	private static final List<ForgeDirection> directions = new ArrayList<ForgeDirection>(Arrays.asList(ForgeDirection.VALID_DIRECTIONS));
+
+	/**
+	 * Deactivate constructor
+	 */
+	private Utils() {
+	}
 
 	/* IINVENTORY HELPERS */
 	/**
@@ -70,7 +86,7 @@ public class Utils {
 			Position pos = new Position(x, y, z, orientation);
 			pos.moveForwards(1.0);
 
-			TileEntity tileInventory = world.getBlockTileEntity((int) pos.x, (int) pos.y, (int) pos.z);
+			TileEntity tileInventory = world.getTileEntity((int) pos.x, (int) pos.y, (int) pos.z);
 			ITransactor transactor = Transactor.getTransactorFor(tileInventory);
 			if (transactor != null && !(tileInventory instanceof TileEngine) && transactor.add(stack, orientation.getOpposite(), false).stackSize > 0) {
 				return transactor.add(stack, orientation.getOpposite(), true).stackSize;
@@ -81,17 +97,25 @@ public class Utils {
 	}
 
 	/**
-	 * Depending on the kind of item in the pipe, set the floor at a different
-	 * level to optimize graphical aspect.
+	 * Returns the cardinal direction of the entity depending on its
+	 * rotationYaw
 	 */
-	public static float getPipeFloorOf(ItemStack item) {
-		return pipeMinPos;
+	public static ForgeDirection get2dOrientation(EntityLivingBase entityliving) {
+		ForgeDirection[] orientationTable = { ForgeDirection.SOUTH,
+				ForgeDirection.WEST, ForgeDirection.NORTH, ForgeDirection.EAST };
+		int orientationIndex = MathHelper.floor_double((entityliving.rotationYaw + 45.0) / 90.0) & 3;
+		return orientationTable[orientationIndex];
 	}
 
-	public static ForgeDirection get2dOrientation(Position pos1, Position pos2) {
-		double Dx = pos1.x - pos2.x;
-		double Dz = pos1.z - pos2.z;
-		double angle = Math.atan2(Dz, Dx) / Math.PI * 180 + 180;
+	/*
+	 * FIXME This is only kept here for the purpose of get3dOrientation, which
+	 * should probably be removed following the same principles
+	 */
+	@Deprecated
+	private static ForgeDirection get2dOrientation(Position pos1, Position pos2) {
+		double dX = pos1.x - pos2.x;
+		double dZ = pos1.z - pos2.z;
+		double angle = Math.atan2(dZ, dX) / Math.PI * 180 + 180;
 
 		if (angle < 45 || angle > 315) {
 			return ForgeDirection.EAST;
@@ -105,9 +129,9 @@ public class Utils {
 	}
 
 	public static ForgeDirection get3dOrientation(Position pos1, Position pos2) {
-		double Dx = pos1.x - pos2.x;
-		double Dy = pos1.y - pos2.y;
-		double angle = Math.atan2(Dy, Dx) / Math.PI * 180 + 180;
+		double dX = pos1.x - pos2.x;
+		double dY = pos1.y - pos2.y;
+		double angle = Math.atan2(dY, dX) / Math.PI * 180 + 180;
 
 		if (angle > 45 && angle < 135) {
 			return ForgeDirection.UP;
@@ -130,21 +154,24 @@ public class Utils {
 		List<ForgeDirection> pipeDirections = new ArrayList<ForgeDirection>();
 
 		for (ForgeDirection side : ForgeDirection.VALID_DIRECTIONS) {
-			if (from.getOpposite() == side)
+			if (from.getOpposite() == side) {
 				continue;
+			}
 
 			Position pos = new Position(x, y, z, side);
 
 			pos.moveForwards(1.0);
 
-			TileEntity tile = world.getBlockTileEntity((int) pos.x, (int) pos.y, (int) pos.z);
+			TileEntity tile = world.getTileEntity((int) pos.x, (int) pos.y, (int) pos.z);
 
 			if (tile instanceof IPipeTile) {
 				IPipeTile pipe = (IPipeTile) tile;
-				if (pipe.getPipeType() != PipeType.ITEM)
+				if (pipe.getPipeType() != PipeType.ITEM) {
 					continue;
-				if (!pipe.isPipeConnected(side.getOpposite()))
+				}
+				if (!pipe.isPipeConnected(side.getOpposite())) {
 					continue;
+				}
 
 				possiblePipes.add(pipe);
 				pipeDirections.add(side.getOpposite());
@@ -166,53 +193,16 @@ public class Utils {
 		tmp.orientation = step;
 		tmp.moveForwards(1.0);
 
-		return world.getBlockTileEntity((int) tmp.x, (int) tmp.y, (int) tmp.z);
-	}
-
-	/**
-	 * Ensures that the given inventory is the full inventory, i.e. takes double
-	 * chests into account.
-	 *
-	 * @param inv
-	 * @return Modified inventory if double chest, unmodified otherwise.
-	 */
-	public static IInventory getInventory(IInventory inv) {
-		if (inv instanceof TileEntityChest) {
-			TileEntityChest chest = (TileEntityChest) inv;
-
-			TileEntityChest adjacent = null;
-
-			if (chest.adjacentChestXNeg != null) {
-				adjacent = chest.adjacentChestXNeg;
-			}
-
-			if (chest.adjacentChestXPos != null) {
-				adjacent = chest.adjacentChestXPos;
-			}
-
-			if (chest.adjacentChestZNeg != null) {
-				adjacent = chest.adjacentChestZNeg;
-			}
-
-			if (chest.adjacentChestZPosition != null) {
-				adjacent = chest.adjacentChestZPosition;
-			}
-
-			if (adjacent != null) {
-				return new InventoryLargeChest("", inv, adjacent);
-			}
-			return inv;
-		}
-		return inv;
+		return world.getTileEntity((int) tmp.x, (int) tmp.y, (int) tmp.z);
 	}
 
 	public static IAreaProvider getNearbyAreaProvider(World world, int i, int j, int k) {
-		TileEntity a1 = world.getBlockTileEntity(i + 1, j, k);
-		TileEntity a2 = world.getBlockTileEntity(i - 1, j, k);
-		TileEntity a3 = world.getBlockTileEntity(i, j, k + 1);
-		TileEntity a4 = world.getBlockTileEntity(i, j, k - 1);
-		TileEntity a5 = world.getBlockTileEntity(i, j + 1, k);
-		TileEntity a6 = world.getBlockTileEntity(i, j - 1, k);
+		TileEntity a1 = world.getTileEntity(i + 1, j, k);
+		TileEntity a2 = world.getTileEntity(i - 1, j, k);
+		TileEntity a3 = world.getTileEntity(i, j, k + 1);
+		TileEntity a4 = world.getTileEntity(i, j, k - 1);
+		TileEntity a5 = world.getTileEntity(i, j + 1, k);
+		TileEntity a6 = world.getTileEntity(i, j - 1, k);
 
 		if (a1 instanceof IAreaProvider) {
 			return (IAreaProvider) a1;
@@ -286,7 +276,7 @@ public class Utils {
 	}
 
 	public static EntityBlock[] createLaserBox(World world, double xMin, double yMin, double zMin, double xMax, double yMax, double zMax, LaserKind kind) {
-		EntityBlock lasers[] = new EntityBlock[12];
+		EntityBlock[] lasers = new EntityBlock[12];
 		Position[] p = new Position[8];
 
 		p[0] = new Position(xMin, yMin, zMin);
@@ -314,6 +304,35 @@ public class Utils {
 		return lasers;
 	}
 
+	public static LaserData[] createLaserDataBox(double xMin, double yMin, double zMin, double xMax, double yMax, double zMax) {
+		LaserData[] lasers = new LaserData[12];
+		Position[] p = new Position[8];
+
+		p[0] = new Position(xMin, yMin, zMin);
+		p[1] = new Position(xMax, yMin, zMin);
+		p[2] = new Position(xMin, yMax, zMin);
+		p[3] = new Position(xMax, yMax, zMin);
+		p[4] = new Position(xMin, yMin, zMax);
+		p[5] = new Position(xMax, yMin, zMax);
+		p[6] = new Position(xMin, yMax, zMax);
+		p[7] = new Position(xMax, yMax, zMax);
+
+		lasers[0] = new LaserData (p[0], p[1]);
+		lasers[1] = new LaserData (p[0], p[2]);
+		lasers[2] = new LaserData (p[2], p[3]);
+		lasers[3] = new LaserData (p[1], p[3]);
+		lasers[4] = new LaserData (p[4], p[5]);
+		lasers[5] = new LaserData (p[4], p[6]);
+		lasers[6] = new LaserData (p[5], p[7]);
+		lasers[7] = new LaserData (p[6], p[7]);
+		lasers[8] = new LaserData (p[0], p[4]);
+		lasers[9] = new LaserData (p[1], p[5]);
+		lasers[10] = new LaserData (p[2], p[6]);
+		lasers[11] = new LaserData (p[3], p[7]);
+
+		return lasers;
+	}
+
 	public static void handleBufferedDescription(ISynchronizedTile tileSynch) {
 		TileEntity tile = (TileEntity) tileSynch;
 		BlockIndex index = new BlockIndex(tile.xCoord, tile.yCoord, tile.zCoord);
@@ -333,12 +352,12 @@ public class Utils {
 	}
 
 	public static void preDestroyBlock(World world, int i, int j, int k) {
-		TileEntity tile = world.getBlockTileEntity(i, j, k);
+		TileEntity tile = world.getTileEntity(i, j, k);
 
-		if (tile instanceof IInventory && !CoreProxy.proxy.isRenderWorld(world)) {
+		if (tile instanceof IInventory && !world.isRemote) {
 			if (!(tile instanceof IDropControlInventory) || ((IDropControlInventory) tile).doDrop()) {
 				InvUtils.dropItems(world, (IInventory) tile, i, j, k);
-				InvUtils.wipeInventory((IInventory)tile);
+				InvUtils.wipeInventory((IInventory) tile);
 			}
 		}
 
@@ -348,40 +367,45 @@ public class Utils {
 	}
 
 	public static boolean checkPipesConnections(TileEntity tile1, TileEntity tile2) {
-		if (tile1 == null || tile2 == null)
+		if (tile1 == null || tile2 == null) {
 			return false;
+		}
 
-		if (!(tile1 instanceof IPipeTile) && !(tile2 instanceof IPipeTile))
+		if (!(tile1 instanceof IPipeTile) && !(tile2 instanceof IPipeTile)) {
 			return false;
+		}
 
 		ForgeDirection o = ForgeDirection.UNKNOWN;
 
-		if (tile1.xCoord - 1 == tile2.xCoord)
+		if (tile1.xCoord - 1 == tile2.xCoord) {
 			o = ForgeDirection.WEST;
-		else if (tile1.xCoord + 1 == tile2.xCoord)
+		} else if (tile1.xCoord + 1 == tile2.xCoord) {
 			o = ForgeDirection.EAST;
-		else if (tile1.yCoord - 1 == tile2.yCoord)
+		} else if (tile1.yCoord - 1 == tile2.yCoord) {
 			o = ForgeDirection.DOWN;
-		else if (tile1.yCoord + 1 == tile2.yCoord)
+		} else if (tile1.yCoord + 1 == tile2.yCoord) {
 			o = ForgeDirection.UP;
-		else if (tile1.zCoord - 1 == tile2.zCoord)
+		} else if (tile1.zCoord - 1 == tile2.zCoord) {
 			o = ForgeDirection.NORTH;
-		else if (tile1.zCoord + 1 == tile2.zCoord)
+		} else if (tile1.zCoord + 1 == tile2.zCoord) {
 			o = ForgeDirection.SOUTH;
+		}
 
-		if (tile1 instanceof IPipeTile && !((IPipeTile) tile1).isPipeConnected(o))
+		if (tile1 instanceof IPipeTile && !((IPipeTile) tile1).isPipeConnected(o)) {
 			return false;
+		}
 
-		if (tile2 instanceof IPipeTile && !((IPipeTile) tile2).isPipeConnected(o.getOpposite()))
+		if (tile2 instanceof IPipeTile && !((IPipeTile) tile2).isPipeConnected(o.getOpposite())) {
 			return false;
+		}
 
 		return true;
 	}
 
 	public static boolean checkLegacyPipesConnections(IBlockAccess blockAccess, int x1, int y1, int z1, int x2, int y2, int z2) {
 
-		Block b1 = Block.blocksList[blockAccess.getBlockId(x1, y1, z1)];
-		Block b2 = Block.blocksList[blockAccess.getBlockId(x2, y2, z2)];
+		Block b1 = blockAccess.getBlock(x1, y1, z1);
+		Block b2 = blockAccess.getBlock(x2, y2, z2);
 
 		if (!(b1 instanceof IFramePipeConnection) && !(b2 instanceof IFramePipeConnection)) {
 			return false;
@@ -399,116 +423,96 @@ public class Utils {
 
 	}
 
-	public static NBTTagCompound getItemData(ItemStack stack) {
-		NBTTagCompound nbt = stack.getTagCompound();
-		if (nbt == null) {
-			nbt = new NBTTagCompound("tag");
-			stack.setTagCompound(nbt);
-		}
-		return nbt;
-	}
-
-	public static void addItemToolTip(ItemStack stack, String tag, String msg) {
-		NBTTagCompound nbt = getItemData(stack);
-		NBTTagCompound display = nbt.getCompoundTag("display");
-		nbt.setCompoundTag("display", display);
-		NBTTagList lore = display.getTagList("Lore");
-		display.setTag("Lore", lore);
-		lore.appendTag(new NBTTagString(tag, msg));
-	}
-
-	public static void writeInvToNBT(IInventory inv, String tag, NBTTagCompound data) {
-		NBTTagList list = new NBTTagList();
-		for (byte slot = 0; slot < inv.getSizeInventory(); slot++) {
-			ItemStack stack = inv.getStackInSlot(slot);
-			if (stack != null) {
-				NBTTagCompound itemTag = new NBTTagCompound();
-				itemTag.setByte("Slot", slot);
-				stack.writeToNBT(itemTag);
-				list.appendTag(itemTag);
-			}
-		}
-		data.setTag(tag, list);
-	}
-
-	public static void readInvFromNBT(IInventory inv, String tag, NBTTagCompound data) {
-		NBTTagList list = data.getTagList(tag);
-		for (byte entry = 0; entry < list.tagCount(); entry++) {
-			NBTTagCompound itemTag = (NBTTagCompound) list.tagAt(entry);
-			int slot = itemTag.getByte("Slot");
-			if (slot >= 0 && slot < inv.getSizeInventory()) {
-				ItemStack stack = ItemStack.loadItemStackFromNBT(itemTag);
-				inv.setInventorySlotContents(slot, stack);
-			}
-		}
-	}
-
-	public static void readStacksFromNBT(NBTTagCompound nbt, String name, ItemStack[] stacks) {
-		NBTTagList nbttaglist = nbt.getTagList(name);
-
-		for (int i = 0; i < stacks.length; ++i) {
-			if (i < nbttaglist.tagCount()) {
-				NBTTagCompound nbttagcompound2 = (NBTTagCompound) nbttaglist.tagAt(i);
-
-				stacks[i] = ItemStack.loadItemStackFromNBT(nbttagcompound2);
-			} else {
-				stacks[i] = null;
-			}
-		}
-	}
-
-	public static void writeStacksToNBT(NBTTagCompound nbt, String name, ItemStack[] stacks) {
-		NBTTagList nbttaglist = new NBTTagList();
-
-		for (int i = 0; i < stacks.length; ++i) {
-			NBTTagCompound cpt = new NBTTagCompound();
-			nbttaglist.appendTag(cpt);
-			if (stacks[i] != null) {
-				stacks[i].writeToNBT(cpt);
-			}
-
-		}
-
-		nbt.setTag(name, nbttaglist);
-	}
-
-	public static ItemStack consumeItem(ItemStack stack) {
-		if (stack.stackSize == 1) {
-			if (stack.getItem().hasContainerItem()) {
-				return stack.getItem().getContainerItemStack(stack);
-			} else {
-				return null;
-			}
-		} else {
-			stack.splitStack(1);
-
-			return stack;
-		}
-	}
-
-	public static <T> T[] concat(T[] first, T[] second) {
-		T[] result = Arrays.copyOf(first, first.length + second.length);
-		System.arraycopy(second, 0, result, first.length, second.length);
-		return result;
-	}
-
-	public static int[] concat(int[] first, int[] second) {
-		int[] result = Arrays.copyOf(first, first.length + second.length);
-		System.arraycopy(second, 0, result, first.length, second.length);
-		return result;
-	}
-
-	public static float[] concat(float[] first, float[] second) {
-		float[] result = Arrays.copyOf(first, first.length + second.length);
-		System.arraycopy(second, 0, result, first.length, second.length);
-		return result;
-	}
-
 	public static int[] createSlotArray(int first, int count) {
 		int[] slots = new int[count];
 		for (int k = first; k < first + count; k++) {
 			slots[k - first] = k;
 		}
 		return slots;
+	}
+
+	public static void writeUTF (ByteBuf data, String str) {
+		try {
+			byte [] b = str.getBytes("UTF-8");
+			data.writeInt (b.length);
+			data.writeBytes(b);
+		} catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
+			data.writeInt (0);
+		}
+	}
+
+	public static String readUTF (ByteBuf data) {
+		try {
+			int len = data.readInt();
+			byte [] b = new byte [len];
+			data.readBytes(b);
+			return new String (b, "UTF-8");
+		} catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+
+	public static void writeNBT (ByteBuf data, NBTTagCompound nbt) {
+		try {
+			byte[] compressed = CompressedStreamTools.compress(nbt);
+			data.writeInt(compressed.length);
+			data.writeBytes(compressed);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public static NBTTagCompound readNBT(ByteBuf data) {
+		try {
+			int length = data.readInt();
+			byte[] compressed = new byte[length];
+			data.readBytes(compressed);
+			return CompressedStreamTools.func_152457_a(compressed, NBTSizeTracker.field_152451_a);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+
+	public static void writeStack (ByteBuf data, ItemStack stack) {
+		if (stack == null) {
+			data.writeBoolean(false);
+		} else {
+			data.writeBoolean(true);
+			NBTTagCompound nbt = new NBTTagCompound();
+			stack.writeToNBT(nbt);
+			Utils.writeNBT(data, nbt);
+		}
+	}
+
+
+	public static ItemStack readStack(ByteBuf data) {
+		if (!data.readBoolean()) {
+			return null;
+		} else {
+			NBTTagCompound nbt = readNBT(data);
+			return ItemStack.loadItemStackFromNBT(nbt);
+		}
+	}
+
+	/**
+	 * This subprogram transforms a packet into a FML packet to be send in the
+	 * minecraft default packet mechanism. This always use BC-CORE as a
+	 * channel, and as a result, should use discriminators declared there.
+	 *
+	 * WARNING! The implementation of this subprogram relies on the internal
+	 * behavior of #FMLIndexedMessageToMessageCodec (in particular the encode
+	 * member). It is probably opening a maintenance issue and should be
+	 * replaced eventually by some more solid mechanism.
+	 */
+	public static FMLProxyPacket toPacket (BuildCraftPacket packet, int discriminator) {
+		ByteBuf buf = Unpooled.buffer();
+
+		buf.writeByte((byte) discriminator);
+		packet.writeData(buf);
+
+		return new FMLProxyPacket(buf, DefaultProps.NET_CHANNEL_NAME + "-CORE");
 	}
 }

@@ -1,11 +1,21 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.transport;
 
-import net.minecraft.client.renderer.texture.IconRegister;
-import net.minecraft.util.Icon;
-import buildcraft.BuildCraftCore;
-import buildcraft.api.core.IIconProvider;
+import net.minecraft.client.renderer.texture.IIconRegister;
+import net.minecraft.util.IIcon;
+
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
+
+import buildcraft.BuildCraftCore;
+import buildcraft.api.core.IIconProvider;
 
 public class PipeIconProvider implements IIconProvider {
 
@@ -15,6 +25,7 @@ public class PipeIconProvider implements IIconProvider {
 		//
 		PipeItemsCobbleStone("pipeItemsCobblestone"),
 		//
+		PipeItemsDiamond_Item("pipeItemsDiamond_item"),
 		PipeItemsDiamond_Center("pipeItemsDiamond_center"),
 		PipeItemsDiamond_Down("pipeItemsDiamond_down"),
 		PipeItemsDiamond_Up("pipeItemsDiamond_up"),
@@ -64,6 +75,9 @@ public class PipeIconProvider implements IIconProvider {
 		PipeItemsEmerald_Standard("pipeItemsEmerald_standard"),
 		PipeAllEmerald_Solid("pipeAllEmerald_solid"),
 		//
+		PipeItemsEmzuli_Standard("pipeItemsEmzuli_standard"),
+		PipeAllEmzuli_Solid("pipeAllEmzuli_solid"),
+		//
 		PipeItemsGold("pipeItemsGold"),
 		//
 		PipeItemsIron_Standard("pipeItemsIron_standard"),
@@ -99,6 +113,18 @@ public class PipeIconProvider implements IIconProvider {
 		PipePowerIronM64("pipePowerIronM64"),
 		PipePowerIronM128("pipePowerIronM128"),
 		//
+		PipePowerHeat0("pipePowerHeat0"),
+		PipePowerHeat1("pipePowerHeat1"),
+		PipePowerHeat2("pipePowerHeat2"),
+		PipePowerHeat3("pipePowerHeat3"),
+		PipePowerHeat4("pipePowerHeat4"),
+		PipePowerHeat5("pipePowerHeat5"),
+		PipePowerHeat6("pipePowerHeat6"),
+		PipePowerHeat7("pipePowerHeat7"),
+		PipePowerHeat8("pipePowerHeat8"),
+		//
+		PipeRobotStation("pipeRobotStation"),
+		//
 		Power_Normal("texture_cyan"),
 		Power_Overload("texture_red_lit"),
 		Stripes("pipeStripes"),
@@ -107,37 +133,38 @@ public class PipeIconProvider implements IIconProvider {
 		public static final TYPE[] VALUES = values();
 		private final String iconTag;
 		private final String iconTagColorBlind;
-		private Icon icon;
+		private IIcon icon;
 
-		private TYPE(String iconTag, String IconTagColorBlind) {
+		private TYPE(String iconTag, String iconTagColorBlind) {
 			this.iconTag = iconTag;
-			this.iconTagColorBlind = IconTagColorBlind;
+			this.iconTagColorBlind = iconTagColorBlind;
 		}
 
 		private TYPE(String iconTag) {
 			this(iconTag, iconTag);
 		}
 
-		private void registerIcon(IconRegister iconRegister) {
+		private void registerIcon(IIconRegister iconRegister) {
 			icon = iconRegister.registerIcon("buildcraft:" + (BuildCraftCore.colorBlindMode ? iconTagColorBlind : iconTag));
 		}
 
-		public Icon getIcon() {
+		public IIcon getIcon() {
 			return icon;
 		}
 	}
 
 	@Override
 	@SideOnly(Side.CLIENT)
-	public Icon getIcon(int pipeIconIndex) {
-		if (pipeIconIndex == -1)
+	public IIcon getIcon(int pipeIconIndex) {
+		if (pipeIconIndex == -1) {
 			return null;
+		}
 		return TYPE.VALUES[pipeIconIndex].icon;
 	}
 
 	@Override
 	@SideOnly(Side.CLIENT)
-	public void registerIcons(IconRegister iconRegister) {
+	public void registerIcons(IIconRegister iconRegister) {
 		for (TYPE type : TYPE.VALUES) {
 			type.registerIcon(iconRegister);
 		}

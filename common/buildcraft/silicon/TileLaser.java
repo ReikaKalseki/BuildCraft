@@ -1,63 +1,82 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.silicon;
 
+import java.util.LinkedList;
+import java.util.List;
+
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.AxisAlignedBB;
+import net.minecraft.util.ResourceLocation;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
 import buildcraft.BuildCraftCore;
+import buildcraft.api.core.NetworkData;
 import buildcraft.api.core.Position;
 import buildcraft.api.core.SafeTimeTracker;
 import buildcraft.api.gates.IAction;
 import buildcraft.api.gates.IActionReceptor;
-import buildcraft.api.power.IPowerReceptor;
-import buildcraft.api.power.PowerHandler;
-import buildcraft.api.power.PowerHandler.PowerReceiver;
-import buildcraft.api.power.PowerHandler.Type;
-import buildcraft.core.BlockIndex;
-import buildcraft.core.EntityEnergyLaser;
+import buildcraft.api.mj.MjBattery;
+import buildcraft.api.power.ILaserTarget;
+import buildcraft.core.Box;
+import buildcraft.core.EntityLaser;
 import buildcraft.core.IMachine;
+import buildcraft.core.LaserData;
 import buildcraft.core.TileBuildCraft;
-import buildcraft.core.proxy.CoreProxy;
 import buildcraft.core.triggers.ActionMachineControl;
-import java.util.LinkedList;
-import java.util.List;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraftforge.common.ForgeDirection;
 
-public class TileLaser extends TileBuildCraft implements IPowerReceptor, IActionReceptor, IMachine {
+public class TileLaser extends TileBuildCraft implements IActionReceptor, IMachine {
 
-	private EntityEnergyLaser laser = null;
-	private final SafeTimeTracker laserTickTracker = new SafeTimeTracker();
-	private final SafeTimeTracker searchTracker = new SafeTimeTracker();
-	private final SafeTimeTracker networkTracker = new SafeTimeTracker();
+	private static final float LASER_OFFSET = 2.0F / 16.0F;
+	private static final short POWER_AVERAGING = 100;
+
+	@NetworkData
+	public LaserData laser = new LaserData();
+
+	private final SafeTimeTracker laserTickTracker = new SafeTimeTracker(10);
+	private final SafeTimeTracker searchTracker = new SafeTimeTracker(100, 100);
+	private final SafeTimeTracker networkTracker = new SafeTimeTracker(20, 3);
 	private ILaserTarget laserTarget;
-	protected PowerHandler powerHandler;
-	private int nextNetworkUpdate = 3;
-	private int nextLaserUpdate = 10;
-	private int nextLaserSearch = 100;
 	private ActionMachineControl.Mode lastMode = ActionMachineControl.Mode.Unknown;
-	private static final PowerHandler.PerditionCalculator PERDITION = new PowerHandler.PerditionCalculator(0.5F);
+	private int powerIndex = 0;
 
-	public TileLaser() {
-		powerHandler = new PowerHandler(this, Type.MACHINE);
-		initPowerProvider();
-	}
+	@MjBattery(maxCapacity = 1000, maxReceivedPerCycle = 25, minimumConsumption = 1)
+	private double mjStored = 0;
+	@NetworkData
+	private double powerAverage = 0;
+	private final double[] power = new double[POWER_AVERAGING];
 
-	private void initPowerProvider() {
-		powerHandler.configure(25, 150, 25, 1000);
-		powerHandler.setPerdition(PERDITION);
+
+	@Override
+	public void initialize() {
+		super.initialize();
+
+		if (laser == null) {
+			laser = new LaserData();
+		}
+		
+		laser.isVisible = false;
+		laser.head = new Position(xCoord, yCoord, zCoord);
+		laser.tail = new Position(xCoord, yCoord, zCoord);
 	}
 
 	@Override
 	public void updateEntity() {
 		super.updateEntity();
 
-		if (!CoreProxy.proxy.isSimulating(worldObj))
+		laser.iterateTexture();
+
+		if (!!worldObj.isRemote) {
 			return;
+		}
 
 		// If a gate disabled us, remove laser and do nothing.
 		if (lastMode == ActionMachineControl.Mode.Off) {
@@ -65,11 +84,10 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 			return;
 		}
 
-		// Check for available tables if none is linked to this laser.
-		if (!isValidTable())
-			if (canFindTable()) {
-				findTable();
-			}
+		// Check for any available tables at a regular basis
+		if (canFindTable()) {
+			findTable();
+		}
 
 		// If we still don't have a valid table or the existing has
 		// become invalid, we disable the laser and do nothing.
@@ -79,16 +97,14 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 		}
 
 		// Disable the laser and do nothing if no energy is available.
-		if (powerHandler.getEnergyStored() == 0) {
+		if (mjStored == 0) {
 			removeLaser();
 			return;
 		}
 
 		// We have a table and can work, so we create a laser if
 		// necessary.
-		if (laser == null) {
-			createLaser();
-		}
+		laser.isVisible = true;
 
 		// We have a laser and may update it
 		if (laser != null && canUpdateLaser()) {
@@ -96,14 +112,15 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 		}
 
 		// Consume power and transfer it to the table.
-		float power = powerHandler.useEnergy(0, getMaxPowerSent(), true);
-		laserTarget.receiveLaserEnergy(power);
+		double localPower = mjStored > getMaxPowerSent() ? getMaxPowerSent() : mjStored;
+		mjStored -= localPower;
+		laserTarget.receiveLaserEnergy(localPower);
 
 		if (laser != null) {
-			laser.pushPower(power);
+			pushPower(localPower);
 		}
 
-		onPowerSent(power);
+		onPowerSent(localPower);
 
 		sendNetworkUpdate();
 	}
@@ -112,27 +129,28 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 		return 4;
 	}
 
-	protected void onPowerSent(float power) {
+	protected void onPowerSent(double power) {
 	}
 
 	protected boolean canFindTable() {
-		return searchTracker.markTimeIfDelay(worldObj, nextLaserSearch);
+		return searchTracker.markTimeIfDelay(worldObj);
 	}
 
 	protected boolean canUpdateLaser() {
-		return laserTickTracker.markTimeIfDelay(worldObj, nextLaserUpdate);
+		return laserTickTracker.markTimeIfDelay(worldObj);
 	}
 
 	protected boolean isValidTable() {
 
-		if (laserTarget == null || laserTarget.isInvalidTarget() || !laserTarget.hasCurrentWork())
+		if (laserTarget == null || laserTarget.isInvalidTarget() || !laserTarget.requiresLaserEnergy()) {
 			return false;
+		}
 
 		return true;
 	}
 
 	protected void findTable() {
-		int meta = worldObj.getBlockMetadata(xCoord, yCoord, zCoord);
+		int meta = getBlockMetadata();
 
 		int minX = xCoord - 5;
 		int minY = yCoord - 5;
@@ -141,7 +159,7 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 		int maxY = yCoord + 5;
 		int maxZ = zCoord + 5;
 
-		switch (ForgeDirection.values()[meta]) {
+		switch (ForgeDirection.getOrientation(meta)) {
 			case WEST:
 				maxX = xCoord;
 				break;
@@ -163,18 +181,18 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 				break;
 		}
 
-		List<BlockIndex> targets = new LinkedList<BlockIndex>();
+		List<ILaserTarget> targets = new LinkedList<ILaserTarget>();
 
 		for (int x = minX; x <= maxX; ++x) {
 			for (int y = minY; y <= maxY; ++y) {
 				for (int z = minZ; z <= maxZ; ++z) {
 
-					TileEntity tile = worldObj.getBlockTileEntity(x, y, z);
+					TileEntity tile = worldObj.getTileEntity(x, y, z);
 					if (tile instanceof ILaserTarget) {
 
 						ILaserTarget table = (ILaserTarget) tile;
-						if (table.hasCurrentWork()) {
-							targets.add(new BlockIndex(x, y, z));
+						if (table.requiresLaserEnergy()) {
+							targets.add(table);
 						}
 					}
 
@@ -182,44 +200,38 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 			}
 		}
 
-		if (targets.isEmpty())
+		if (targets.isEmpty()) {
 			return;
+		}
 
-		BlockIndex b = targets.get(worldObj.rand.nextInt(targets.size()));
-		laserTarget = (ILaserTarget) worldObj.getBlockTileEntity(b.x, b.y, b.z);
-	}
-
-	protected void createLaser() {
-
-		laser = new EntityEnergyLaser(worldObj, new Position(xCoord, yCoord, zCoord), new Position(xCoord, yCoord, zCoord));
-		worldObj.spawnEntityInWorld(laser);
+		laserTarget = targets.get(worldObj.rand.nextInt(targets.size()));
 	}
 
 	protected void updateLaser() {
 
-		int meta = worldObj.getBlockMetadata(xCoord, yCoord, zCoord);
+		int meta = getBlockMetadata();
 		double px = 0, py = 0, pz = 0;
 
-		switch (ForgeDirection.values()[meta]) {
+		switch (ForgeDirection.getOrientation(meta)) {
 
 			case WEST:
-				px = -0.3;
+				px = -LASER_OFFSET;
 				break;
 			case EAST:
-				px = 0.3;
+				px = LASER_OFFSET;
 				break;
 			case DOWN:
-				py = -0.3;
+				py = -LASER_OFFSET;
 				break;
 			case UP:
-				py = 0.3;
+				py = LASER_OFFSET;
 				break;
 			case NORTH:
-				pz = -0.3;
+				pz = -LASER_OFFSET;
 				break;
 			case SOUTH:
 			default:
-				pz = 0.3;
+				pz = LASER_OFFSET;
 				break;
 		}
 
@@ -227,33 +239,24 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 		Position tail = new Position(laserTarget.getXCoord() + 0.475 + (worldObj.rand.nextFloat() - 0.5) / 5F, laserTarget.getYCoord() + 9F / 16F,
 				laserTarget.getZCoord() + 0.475 + (worldObj.rand.nextFloat() - 0.5) / 5F);
 
-		laser.setPositions(head, tail);
+		laser.head = head;
+		laser.tail = tail;
 
-		if (!laser.isVisible()) {
-			laser.show();
+		if (!laser.isVisible) {
+			laser.isVisible = true;
 		}
 	}
 
 	protected void removeLaser() {
-
-		if (laser != null) {
-			laser.setDead();
-			laser = null;
-		}
-	}
-
-	@Override
-	public PowerReceiver getPowerReceiver(ForgeDirection side) {
-		return powerHandler.getPowerReceiver();
-	}
-
-	@Override
-	public void doWork(PowerHandler workProvider) {
+		laser.isVisible = false;
+		// force sending the network update even if the network tracker
+		// refuses.
+		super.sendNetworkUpdate();
 	}
 
 	@Override
 	public void sendNetworkUpdate() {
-		if (networkTracker.markTimeIfDelay(worldObj, nextNetworkUpdate)) {
+		if (networkTracker.markTimeIfDelay(worldObj)) {
 			super.sendNetworkUpdate();
 		}
 	}
@@ -262,15 +265,14 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 	public void readFromNBT(NBTTagCompound nbttagcompound) {
 		super.readFromNBT(nbttagcompound);
 
-		powerHandler.readFromNBT(nbttagcompound);
-		initPowerProvider();
+		mjStored = nbttagcompound.getDouble("mjStored");
 	}
 
 	@Override
 	public void writeToNBT(NBTTagCompound nbttagcompound) {
 		super.writeToNBT(nbttagcompound);
 
-		powerHandler.writeToNBT(nbttagcompound);
+		nbttagcompound.setDouble("mjStored", mjStored);
 	}
 
 	@Override
@@ -306,5 +308,35 @@ public class TileLaser extends TileBuildCraft implements IPowerReceptor, IAction
 		} else if (action == BuildCraftCore.actionOff) {
 			lastMode = ActionMachineControl.Mode.Off;
 		}
+	}
+
+	private void pushPower(double received) {
+		powerAverage -= power[powerIndex];
+		powerAverage += received;
+		power[powerIndex] = received;
+		powerIndex++;
+
+		if (powerIndex == power.length) {
+			powerIndex = 0;
+		}
+	}
+
+	public ResourceLocation getTexture() {
+		double avg = powerAverage / POWER_AVERAGING;
+
+		if (avg <= 1.0) {
+			return EntityLaser.LASER_TEXTURES[0];
+		} else if (avg <= 2.0) {
+			return EntityLaser.LASER_TEXTURES[1];
+		} else if (avg <= 3.0) {
+			return EntityLaser.LASER_TEXTURES[2];
+		} else {
+			return EntityLaser.LASER_TEXTURES[3];
+		}
+	}
+
+	@Override
+	public AxisAlignedBB getRenderBoundingBox() {
+		return new Box(this).extendToEncompass(laser.tail).getBoundingBox();
 	}
 }

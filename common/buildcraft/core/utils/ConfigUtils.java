@@ -1,22 +1,20 @@
-/*
- * Copyright (c) SpaceToad, 2011-2012
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
- * 
+ *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.core.utils;
 
-import buildcraft.BuildCraftCore;
 import java.util.logging.Level;
-import net.minecraftforge.common.Configuration;
-import net.minecraftforge.common.Property;
 
-/**
- *
- * @author CovertJaguar <http://www.railcraft.info/>
- */
+import net.minecraftforge.common.config.Configuration;
+import net.minecraftforge.common.config.Property;
+
+import buildcraft.api.core.BCLog;
+
 public class ConfigUtils {
 
 	private static final String COMMENT_PREFIX = "";
@@ -34,43 +32,45 @@ public class ConfigUtils {
 	}
 
 	public boolean get(String tag, boolean defaultValue, boolean reset, String comment) {
-		comment = COMMENT_PREFIX + comment.replace("{t}", tag) + COMMENT_SUFFIX;
 		Property prop = config.get(cat, tag, defaultValue);
-		prop.comment = comment;
+		prop.comment = COMMENT_PREFIX + comment.replace("{t}", tag) + COMMENT_SUFFIX;
+
 		boolean ret = parseBoolean(prop, defaultValue);
-		if (reset)
+
+		if (reset) {
 			prop.set(defaultValue);
+		}
+
 		return ret;
 	}
 
 	public int get(String tag, int defaultValue, String comment) {
-		comment = COMMENT_PREFIX + comment.replace("{t}", tag) + COMMENT_SUFFIX;
 		Property prop = config.get(cat, tag, defaultValue);
-		prop.comment = comment;
+		prop.comment = COMMENT_PREFIX + comment.replace("{t}", tag) + COMMENT_SUFFIX;
 		return parseInteger(prop, defaultValue);
 	}
 
 	public int get(String tag, int min, int defaultValue, int max, String comment) {
-		comment = COMMENT_PREFIX + comment.replace("{t}", tag) + COMMENT_SUFFIX;
 		Property prop = config.get(cat, tag, defaultValue);
-		prop.comment = comment;
+		prop.comment = COMMENT_PREFIX + comment.replace("{t}", tag) + COMMENT_SUFFIX;
 		int parsed = parseInteger(prop, defaultValue);
 		int clamped = Math.max(parsed, min);
 		clamped = Math.min(clamped, max);
-		if (clamped != parsed)
+		if (clamped != parsed) {
 			prop.set(clamped);
+		}
 		return clamped;
 	}
 
 	public float get(String tag, float min, float defaultValue, float max, String comment) {
-		comment = COMMENT_PREFIX + comment.replace("{t}", tag) + COMMENT_SUFFIX;
 		Property prop = config.get(cat, tag, defaultValue);
-		prop.comment = comment;
+		prop.comment = COMMENT_PREFIX + comment.replace("{t}", tag) + COMMENT_SUFFIX;
 		double parsed = parseDouble(prop, defaultValue);
 		double clamped = Math.max(parsed, min);
 		clamped = Math.min(clamped, max);
-		if (clamped != parsed)
+		if (clamped != parsed) {
 			prop.set(clamped);
+		}
 		return (float) clamped;
 	}
 
@@ -80,7 +80,7 @@ public class ConfigUtils {
 		try {
 			parsed = Boolean.parseBoolean(value);
 		} catch (NumberFormatException ex) {
-			BuildCraftCore.bcLog.log(Level.WARNING, "Failed to parse config tag, reseting to default: " + prop.getName(), ex);
+			BCLog.logger.log(Level.WARNING, "Failed to parse config tag, reseting to default: " + prop.getName(), ex);
 			prop.set(defaultValue);
 			return defaultValue;
 		}
@@ -93,7 +93,7 @@ public class ConfigUtils {
 		try {
 			parsed = Integer.parseInt(value);
 		} catch (NumberFormatException ex) {
-			BuildCraftCore.bcLog.log(Level.WARNING, "Failed to parse config tag, reseting to default: " + prop.getName(), ex);
+			BCLog.logger.log(Level.WARNING, "Failed to parse config tag, reseting to default: " + prop.getName(), ex);
 			prop.set(defaultValue);
 			return defaultValue;
 		}
@@ -106,7 +106,7 @@ public class ConfigUtils {
 		try {
 			parsed = Double.parseDouble(value);
 		} catch (NumberFormatException ex) {
-			BuildCraftCore.bcLog.log(Level.WARNING, "Failed to parse config tag, reseting to default: " + prop.getName(), ex);
+			BCLog.logger.log(Level.WARNING, "Failed to parse config tag, reseting to default: " + prop.getName(), ex);
 			prop.set(defaultValue);
 			return defaultValue;
 		}

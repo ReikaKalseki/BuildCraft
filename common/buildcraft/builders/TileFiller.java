@@ -1,286 +1,246 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.builders;
 
+import java.io.IOException;
+
+import io.netty.buffer.ByteBuf;
+
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.AxisAlignedBB;
+
 import buildcraft.BuildCraftCore;
 import buildcraft.api.core.IAreaProvider;
-import buildcraft.api.core.LaserKind;
 import buildcraft.api.filler.FillerManager;
-import buildcraft.api.filler.IFillerPattern;
 import buildcraft.api.gates.IAction;
 import buildcraft.api.gates.IActionReceptor;
-import buildcraft.api.power.IPowerReceptor;
-import buildcraft.api.power.PowerHandler;
-import buildcraft.api.power.PowerHandler.PowerReceiver;
-import buildcraft.api.power.PowerHandler.Type;
+import buildcraft.builders.filler.pattern.FillerPattern;
+import buildcraft.builders.filler.pattern.PatternFill;
+import buildcraft.builders.triggers.ActionFiller;
 import buildcraft.core.Box;
+import buildcraft.core.Box.Kind;
 import buildcraft.core.IMachine;
-import buildcraft.core.TileBuildCraft;
+import buildcraft.core.blueprints.BptBuilderTemplate;
+import buildcraft.core.blueprints.BptContext;
+import buildcraft.core.inventory.SimpleInventory;
+import buildcraft.core.network.PacketPayload;
 import buildcraft.core.network.PacketUpdate;
-import buildcraft.core.network.TileNetworkData;
-import buildcraft.core.proxy.CoreProxy;
+import buildcraft.core.network.RPC;
+import buildcraft.core.network.RPCHandler;
+import buildcraft.core.network.RPCSide;
 import buildcraft.core.triggers.ActionMachineControl;
 import buildcraft.core.triggers.ActionMachineControl.Mode;
 import buildcraft.core.utils.Utils;
-import java.io.IOException;
-import net.minecraft.block.Block;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.inventory.ISidedInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraftforge.common.ForgeDirection;
 
-public class TileFiller extends TileBuildCraft implements ISidedInventory, IPowerReceptor, IMachine, IActionReceptor {
+public class TileFiller extends TileAbstractBuilder implements IMachine, IActionReceptor {
 
-	private static int[] SLOTS_GRID = Utils.createSlotArray(0, 9);
-	private static int[] SLOTS_INPUT = Utils.createSlotArray(9, 27);
-	public @TileNetworkData
-	Box box = new Box();
-	public @TileNetworkData
-	int currentPatternId = 0;
-	public @TileNetworkData
-	boolean done = true;
-	public IFillerPattern currentPattern;
-	boolean forceDone = false;
-	private ItemStack contents[];
-	private PowerHandler powerHandler;
+	private static int POWER_ACTIVATION = 50;
+
+	public FillerPattern currentPattern = PatternFill.INSTANCE;
+
+	private BptBuilderTemplate currentTemplate;
+	private BptContext context;
+
+	private final Box box = new Box();
+	private boolean done = false;
 	private ActionMachineControl.Mode lastMode = ActionMachineControl.Mode.Unknown;
+	private SimpleInventory inv = new SimpleInventory(27, "Filler", 64);
+
+	private NBTTagCompound initNBT = null;
 
 	public TileFiller() {
-		contents = new ItemStack[getSizeInventory()];
-		powerHandler = new PowerHandler(this, Type.MACHINE);
-		initPowerProvider();
-	}
-
-	private void initPowerProvider() {
-		powerHandler.configure(30, 50, 25, 100);
-		powerHandler.configurePowerPerdition(1, 1);
+		inv.addListener(this);
+		box.kind = Kind.STRIPES;
 	}
 
 	@Override
 	public void initialize() {
 		super.initialize();
 
-		if (!CoreProxy.proxy.isRenderWorld(worldObj)) {
-			IAreaProvider a = Utils.getNearbyAreaProvider(worldObj, xCoord, yCoord, zCoord);
-
-			if (a != null) {
-				box.initialize(a);
-
-				if (a instanceof TileMarker) {
-					((TileMarker) a).removeFromWorld();
-				}
-
-				if (!CoreProxy.proxy.isRenderWorld(worldObj) && box.isInitialized()) {
-					box.createLasers(worldObj, LaserKind.Stripes);
-				}
-				sendNetworkUpdate();
-			}
+		if (worldObj.isRemote) {
+			return;
 		}
 
-		computeRecipe();
+		IAreaProvider a = Utils.getNearbyAreaProvider(worldObj, xCoord, yCoord,
+				zCoord);
+
+		if (a != null) {
+			box.initialize(a);
+
+			if (a instanceof TileMarker) {
+				((TileMarker) a).removeFromWorld();
+			}
+
+			sendNetworkUpdate();
+		}
+
+		if (currentPattern != null && currentTemplate == null) {
+			currentTemplate = currentPattern
+					.getTemplateBuilder(box, getWorld());
+			context = currentTemplate.getContext();
+		}
+
+		if (initNBT != null && currentTemplate != null) {
+			currentTemplate.loadBuildStateToNBT(
+					initNBT.getCompoundTag("builderState"), this);
+		}
+
+		initNBT = null;
 	}
 
 	@Override
 	public void updateEntity() {
 		super.updateEntity();
 
+		if (worldObj.isRemote) {
+			return;
+		}
+
+		if (lastMode == Mode.Off) {
+			return;
+		}
+
+		if (!box.isInitialized()) {
+			return;
+		}
+
+		if (mjStored < POWER_ACTIVATION || !buildTracker.markTimeIfDelay(worldObj)) {
+			return;
+		}
+
+		boolean oldDone = done;
+
 		if (done) {
 			if (lastMode == Mode.Loop) {
 				done = false;
-			} else
+			} else {
 				return;
-		}
-
-		if (powerHandler.getEnergyStored() >= 25) {
-			doWork(powerHandler);
-		}
-	}
-
-	@Override
-	public void doWork(PowerHandler workProvider) {
-		if (CoreProxy.proxy.isRenderWorld(worldObj))
-			return;
-
-		if (lastMode == Mode.Off)
-			return;
-
-		if (powerHandler.useEnergy(25, 25, true) < 25)
-			return;
-
-		if (box.isInitialized() && currentPattern != null && !done) {
-			ItemStack stack = null;
-			int stackId = 0;
-
-			for (int s = 9; s < getSizeInventory(); ++s) {
-				if (getStackInSlot(s) != null && getStackInSlot(s).stackSize > 0) {
-
-					stack = contents[s];
-					stackId = s;
-
-					break;
-				}
-			}
-
-			done = currentPattern.iteratePattern(this, box, stack);
-
-			if (stack != null && stack.stackSize == 0) {
-				contents[stackId] = null;
-			}
-
-			if (done) {
-				worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
-				sendNetworkUpdate();
 			}
 		}
 
-		if (powerHandler.getEnergyStored() >= 25) {
-			doWork(workProvider);
-		}
-	}
-
-	@Override
-	public final int getSizeInventory() {
-		return 36;
-	}
-
-	@Override
-	public ItemStack getStackInSlot(int i) {
-		return contents[i];
-	}
-
-	public void computeRecipe() {
-		if (CoreProxy.proxy.isRenderWorld(worldObj))
-			return;
-
-		IFillerPattern newPattern = FillerManager.registry.findMatchingRecipe(this);
-
-		if (newPattern == currentPattern)
-			return;
-
-		currentPattern = newPattern;
-
-		if (currentPattern == null || forceDone) {
-			done = lastMode != Mode.Loop;
-			forceDone = false;
-		} else {
-			done = false;
+		if (currentPattern != null && currentTemplate == null) {
+			currentTemplate = currentPattern.getTemplateBuilder(box, getWorld());
+			context = currentTemplate.getContext();
 		}
 
-		if (worldObj != null) {
-			worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
+		if (currentTemplate != null) {
+			currentTemplate.buildNextSlot(worldObj, this, xCoord, yCoord, zCoord);
+
+			if (currentTemplate.isDone(this)) {
+				done = true;
+				currentTemplate = null;
+			}
 		}
 
-		if (currentPattern == null) {
-			currentPatternId = 0;
-		} else {
-			currentPatternId = currentPattern.getId();
-		}
-
-		if (CoreProxy.proxy.isSimulating(worldObj)) {
+		if (oldDone != done) {
 			sendNetworkUpdate();
 		}
 	}
 
 	@Override
-	public ItemStack decrStackSize(int i, int j) {
-		if (contents[i] != null) {
-			if (contents[i].stackSize <= j) {
-				ItemStack itemstack = contents[i];
-				contents[i] = null;
-				// onInventoryChanged();
-
-				computeRecipe();
-
-				return itemstack;
-			}
-
-			ItemStack itemstack1 = contents[i].splitStack(j);
-
-			if (contents[i].stackSize == 0) {
-				contents[i] = null;
-			}
-			// onInventoryChanged();
-
-			computeRecipe();
-
-			return itemstack1;
-		} else
-			return null;
+	public final int getSizeInventory() {
+		return inv.getSizeInventory();
 	}
 
 	@Override
-	public void setInventorySlotContents(int i, ItemStack itemstack) {
-		contents[i] = itemstack;
-		if (itemstack != null && itemstack.stackSize > getInventoryStackLimit()) {
-			itemstack.stackSize = getInventoryStackLimit();
-		}
+	public ItemStack getStackInSlot(int slot) {
+		return inv.getStackInSlot(slot);
+	}
 
-		computeRecipe();
-		// onInventoryChanged();
+	@Override
+	public ItemStack decrStackSize(int slot, int amount) {
+		return inv.decrStackSize(slot, amount);
+	}
+
+	@Override
+	public void setInventorySlotContents(int slot, ItemStack stack) {
+		inv.setInventorySlotContents(slot, stack);
 	}
 
 	@Override
 	public ItemStack getStackInSlotOnClosing(int slot) {
-		if (contents[slot] == null)
-			return null;
-		ItemStack toReturn = contents[slot];
-		contents[slot] = null;
-		return toReturn;
+		return inv.getStackInSlotOnClosing(slot);
 	}
 
 	@Override
-	public String getInvName() {
+	public String getInventoryName() {
 		return "Filler";
 	}
 
 	@Override
-	public void readFromNBT(NBTTagCompound nbttagcompound) {
-		super.readFromNBT(nbttagcompound);
+	public void readFromNBT(NBTTagCompound nbt) {
+		super.readFromNBT(nbt);
 
-		Utils.readStacksFromNBT(nbttagcompound, "Items", contents);
+		inv.readFromNBT(nbt);
 
-		if (nbttagcompound.hasKey("box")) {
-			box.initialize(nbttagcompound.getCompoundTag("box"));
+		if (nbt.hasKey("pattern")) {
+			currentPattern = (FillerPattern) FillerManager.registry.getPattern(nbt.getString("pattern"));
 		}
 
-		done = nbttagcompound.getBoolean("done");
-		lastMode = Mode.values()[nbttagcompound.getByte("lastMode")];
+		if (currentPattern == null) {
+			currentPattern = PatternFill.INSTANCE;
+		}
 
-		forceDone = done;
+		if (nbt.hasKey("box")) {
+			box.initialize(nbt.getCompoundTag("box"));
+		}
+
+		done = nbt.getBoolean("done");
+		lastMode = Mode.values()[nbt.getByte("lastMode")];
+
+		// The rest of load has to be done upon initialize.
+		initNBT = (NBTTagCompound) nbt.getCompoundTag("bpt").copy();
 	}
 
 	@Override
-	public void writeToNBT(NBTTagCompound nbttagcompound) {
-		super.writeToNBT(nbttagcompound);
+	public void writeToNBT(NBTTagCompound nbt) {
+		super.writeToNBT(nbt);
 
-		Utils.writeStacksToNBT(nbttagcompound, "Items", contents);
+		inv.writeToNBT(nbt);
 
-		if (box != null) {
-			NBTTagCompound boxStore = new NBTTagCompound();
-			box.writeToNBT(boxStore);
-			nbttagcompound.setTag("box", boxStore);
+		if (currentPattern != null) {
+			nbt.setString("pattern", currentPattern.getUniqueTag());
 		}
 
-		nbttagcompound.setBoolean("done", done);
-		nbttagcompound.setByte("lastMode", (byte) lastMode.ordinal());
+		NBTTagCompound boxStore = new NBTTagCompound();
+		box.writeToNBT(boxStore);
+		nbt.setTag("box", boxStore);
+
+		nbt.setBoolean("done", done);
+		nbt.setByte("lastMode", (byte) lastMode.ordinal());
+
+		NBTTagCompound bptNBT = new NBTTagCompound();
+
+		if (currentTemplate != null) {
+			NBTTagCompound builderCpt = new NBTTagCompound();
+			currentTemplate.saveBuildStateToNBT(builderCpt, this);
+			bptNBT.setTag("builderState", builderCpt);
+		}
+
+		nbt.setTag("bpt", bptNBT);
 	}
 
 	@Override
 	public int getInventoryStackLimit() {
-		return 64;
+		return inv.getInventoryStackLimit();
 	}
 
 	@Override
 	public boolean isUseableByPlayer(EntityPlayer entityplayer) {
-		if (worldObj.getBlockTileEntity(xCoord, yCoord, zCoord) != this)
+		if (worldObj.getTileEntity(xCoord, yCoord, zCoord) != this) {
 			return false;
-		return entityplayer.getDistanceSq(xCoord + 0.5D, yCoord + 0.5D, zCoord + 0.5D) <= 64D;
+		}
+
+		return entityplayer.getDistanceSq(xCoord + 0.5D, yCoord + 0.5D,
+				zCoord + 0.5D) <= 64D;
 	}
 
 	@Override
@@ -289,44 +249,46 @@ public class TileFiller extends TileBuildCraft implements ISidedInventory, IPowe
 		destroy();
 	}
 
-	@Override
-	public void destroy() {
-		if (box != null) {
-			box.deleteLasers();
+	public void setPattern(FillerPattern pattern) {
+		if (pattern != null && currentPattern != pattern) {
+			currentPattern = pattern;
+			currentTemplate = null;
+			done = false;
+			sendNetworkUpdate();
 		}
+	}
+
+	@Override
+	public PacketPayload getPacketPayload() {
+		PacketPayload payload = new PacketPayload(new PacketPayload.StreamWriter() {
+			@Override
+			public void writeData(ByteBuf data) {
+				box.writeToStream(data);
+				data.writeBoolean(done);
+				Utils.writeUTF(data, currentPattern.getUniqueTag());
+			}
+		});
+
+		return payload;
+	}
+
+	public void handlePacketPayload(ByteBuf data) {
+		boolean initialized = box.isInitialized();
+		box.readFromStream(data);
+		done = data.readBoolean();
+		setPattern((FillerPattern) FillerManager.registry.getPattern(Utils.readUTF(data)));
+
+		worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
 	}
 
 	@Override
 	public void handleDescriptionPacket(PacketUpdate packet) throws IOException {
-		boolean initialized = box.isInitialized();
-
-		super.handleDescriptionPacket(packet);
-
-		currentPattern = FillerManager.registry.getPattern(currentPatternId);
-		worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
-
-		if (!initialized && box.isInitialized()) {
-			box.createLasers(worldObj, LaserKind.Stripes);
-		}
+		handlePacketPayload(packet.payload.stream);
 	}
 
 	@Override
 	public void handleUpdatePacket(PacketUpdate packet) throws IOException {
-		boolean initialized = box.isInitialized();
-
-		super.handleUpdatePacket(packet);
-
-		currentPattern = FillerManager.registry.getPattern(currentPatternId);
-		worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
-
-		if (!initialized && box.isInitialized()) {
-			box.createLasers(worldObj, LaserKind.Stripes);
-		}
-	}
-
-	@Override
-	public PowerReceiver getPowerReceiver(ForgeDirection side) {
-		return powerHandler.getPowerReceiver();
+		handlePacketPayload(packet.payload.stream);
 	}
 
 	@Override
@@ -345,11 +307,11 @@ public class TileFiller extends TileBuildCraft implements ISidedInventory, IPowe
 	}
 
 	@Override
-	public void openChest() {
+	public void openInventory() {
 	}
 
 	@Override
-	public void closeChest() {
+	public void closeInventory() {
 	}
 
 	@Override
@@ -360,6 +322,9 @@ public class TileFiller extends TileBuildCraft implements ISidedInventory, IPowe
 			lastMode = ActionMachineControl.Mode.Off;
 		} else if (action == BuildCraftCore.actionLoop) {
 			lastMode = ActionMachineControl.Mode.Loop;
+		} else if (action instanceof ActionFiller) {
+			ActionFiller actFill = (ActionFiller) action;
+			setPattern(actFill.pattern);
 		}
 	}
 
@@ -370,29 +335,36 @@ public class TileFiller extends TileBuildCraft implements ISidedInventory, IPowe
 
 	@Override
 	public boolean isItemValidForSlot(int slot, ItemStack stack) {
-		if (slot < 9) {
-			if (getStackInSlot(slot) != null)
-				return false;
-			return stack.itemID == Block.brick.blockID || stack.itemID == Block.glass.blockID;
-		}
 		return true;
 	}
 
-	@Override
-	public int[] getAccessibleSlotsFromSide(int side) {
-		if (ForgeDirection.UP.ordinal() == side) {
-			return SLOTS_GRID;
-		}
-		return SLOTS_INPUT;
+	public void rpcSetPatternFromString (String name) {
+		RPCHandler.rpcServer(this, "setPatternFromString", name);
+	}
+
+	@RPC (RPCSide.SERVER)
+	public void setPatternFromString (String name) {
+		setPattern((FillerPattern) FillerManager.registry.getPattern(name));
 	}
 
 	@Override
-	public boolean canInsertItem(int slot, ItemStack stack, int side) {
-		return isItemValidForSlot(slot, stack);
+	public boolean hasCustomInventoryName() {
+		return false;
 	}
 
 	@Override
-	public boolean canExtractItem(int slot, ItemStack stack, int side) {
+	public Box getBox() {
+		return box;
+	}
+
+	@Override
+	public AxisAlignedBB getRenderBoundingBox() {
+		return new Box (this).extendToEncompass(box).expand(50).getBoundingBox();
+	}
+
+	@Override
+	public boolean isBuildingMaterialSlot(int i) {
 		return true;
 	}
+
 }

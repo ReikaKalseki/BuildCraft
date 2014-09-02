@@ -1,21 +1,29 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.core.gui.buttons;
 
-import buildcraft.core.DefaultProps;
-import buildcraft.core.gui.tooltips.ToolTip;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
+import org.lwjgl.opengl.GL11;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.util.ResourceLocation;
-import org.lwjgl.opengl.GL11;
 
-/**
- *
- * @author CovertJaguar <railcraft.wikispaces.com>
- */
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+
+import buildcraft.core.DefaultProps;
+import buildcraft.core.gui.tooltips.IToolTipProvider;
+import buildcraft.core.gui.tooltips.ToolTip;
+
 @SideOnly(Side.CLIENT)
-public class GuiBetterButton extends GuiButton {
+public class GuiBetterButton extends GuiButton implements IToolTipProvider {
 
 	public static final ResourceLocation BUTTON_TEXTURES = new ResourceLocation("buildcraft", DefaultProps.TEXTURE_PATH_GUI + "/buttons.png");
 	protected final IButtonTextureSet texture;
@@ -62,9 +70,10 @@ public class GuiBetterButton extends GuiButton {
 
 	@Override
 	public void drawButton(Minecraft minecraft, int mouseX, int mouseY) {
-		if (!drawButton) {
+		if (!visible) {
 			return;
 		}
+		
 		FontRenderer fontrenderer = minecraft.fontRenderer;
 		bindButtonTextures(minecraft);
 		GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
@@ -80,11 +89,22 @@ public class GuiBetterButton extends GuiButton {
 		drawCenteredString(fontrenderer, displayString, xPosition + width / 2, yPosition + (h - 8) / 2, getTextColor(mouseOver));
 	}
 
+	@Override
 	public ToolTip getToolTip() {
 		return toolTip;
 	}
 
 	public void setToolTip(ToolTip tips) {
 		this.toolTip = tips;
+	}
+
+	@Override
+	public boolean isToolTipVisible() {
+		return visible;
+	}
+
+	@Override
+	public boolean isMouseOver(int mouseX, int mouseY) {
+		return isMouseOverButton(mouseX, mouseY);
 	}
 }

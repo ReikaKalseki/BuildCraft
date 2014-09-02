@@ -1,33 +1,42 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.transport.utils;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import net.minecraftforge.common.ForgeDirection;
+import io.netty.buffer.ByteBuf;
+
+import net.minecraft.block.Block;
+
+import net.minecraftforge.common.util.ForgeDirection;
 
 public class FacadeMatrix {
 
-	private final int[] _blockIds = new int[ForgeDirection.VALID_DIRECTIONS.length];
-	private final int[] _blockMetas = new int[ForgeDirection.VALID_DIRECTIONS.length];
+	private final Block[] blocks = new Block[ForgeDirection.VALID_DIRECTIONS.length];
+	private final int[] blockMetas = new int[ForgeDirection.VALID_DIRECTIONS.length];
 	private boolean dirty = false;
 
 	public FacadeMatrix() {
 	}
 
-	public void setFacade(ForgeDirection direction, int blockId, int blockMeta) {
-		if (_blockIds[direction.ordinal()] != blockId || _blockMetas[direction.ordinal()] != blockMeta) {
-			_blockIds[direction.ordinal()] = blockId;
-			_blockMetas[direction.ordinal()] = blockMeta;
+	public void setFacade(ForgeDirection direction, Block block, int blockMeta) {
+		if (blocks[direction.ordinal()] != block || blockMetas[direction.ordinal()] != blockMeta) {
+			blocks[direction.ordinal()] = block;
+			blockMetas[direction.ordinal()] = blockMeta;
 			dirty = true;
 		}
 	}
 
-	public int getFacadeBlockId(ForgeDirection direction) {
-		return _blockIds[direction.ordinal()];
+	public Block getFacadeBlock(ForgeDirection direction) {
+		return blocks[direction.ordinal()];
 	}
 
 	public int getFacadeMetaId(ForgeDirection direction) {
-		return _blockMetas[direction.ordinal()];
+		return blockMetas[direction.ordinal()];
 	}
 
 	public boolean isDirty() {
@@ -38,23 +47,37 @@ public class FacadeMatrix {
 		dirty = false;
 	}
 
-	public void writeData(DataOutputStream data) throws IOException {
+	public void writeData(ByteBuf data) {
 		for (int i = 0; i < ForgeDirection.VALID_DIRECTIONS.length; i++) {
-			data.writeShort(_blockIds[i]);
-			data.writeByte(_blockMetas[i]);
+			if (blocks [i] == null) {
+				data.writeShort(0);
+			} else {
+				data.writeShort(Block.blockRegistry.getIDForObject(blocks[i]));
+			}
+			
+			data.writeByte(blockMetas[i]);
 		}
 	}
 
-	public void readData(DataInputStream data) throws IOException {
+	public void readData(ByteBuf data) {
 		for (int i = 0; i < ForgeDirection.VALID_DIRECTIONS.length; i++) {
 			short id = data.readShort();
-			if (_blockIds[i] != id) {
-				_blockIds[i] = id;
+			
+			Block block;
+			
+			if (id == 0) {
+				block = null;
+			} else {
+				block = (Block) Block.blockRegistry.getObjectById(id);
+			}
+			
+			if (blocks[i] != block) {
+				blocks[i] = block;
 				dirty = true;
 			}
 			byte meta = data.readByte();
-			if (_blockMetas[i] != meta) {
-				_blockMetas[i] = meta;
+			if (blockMetas[i] != meta) {
+				blockMetas[i] = meta;
 				dirty = true;
 			}
 		}

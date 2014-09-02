@@ -1,7 +1,7 @@
-/*
- * Copyright (c) SpaceToad, 2011-2012
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
- * 
+ *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
@@ -10,16 +10,15 @@ package buildcraft.core.inventory;
 
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.ItemStack;
 
 /**
  * Allows you to deal with multiple inventories through a single interface.
- *
- * @author CovertJaguar <http://www.railcraft.info/>
  */
-public class InventoryConcatenator implements IInventory {
+public final class InventoryConcatenator implements IInventory {
 
 	private final List<Integer> slotMap = new ArrayList<Integer>();
 	private final List<IInventory> invMap = new ArrayList<IInventory>();
@@ -65,13 +64,8 @@ public class InventoryConcatenator implements IInventory {
 	}
 
 	@Override
-	public String getInvName() {
+	public String getInventoryName() {
 		return "";
-	}
-
-	@Override
-	public boolean isInvNameLocalized() {
-		return false;
 	}
 
 	@Override
@@ -80,24 +74,29 @@ public class InventoryConcatenator implements IInventory {
 	}
 
 	@Override
-	public void onInventoryChanged() {
-	}
-
-	@Override
 	public boolean isUseableByPlayer(EntityPlayer entityplayer) {
 		return true;
 	}
 
 	@Override
-	public void openChest() {
+	public void openInventory() {
 	}
 
 	@Override
-	public void closeChest() {
+	public void closeInventory() {
 	}
 
 	@Override
 	public boolean isItemValidForSlot(int slot, ItemStack stack) {
 		return invMap.get(slot).isItemValidForSlot(slotMap.get(slot), stack);
+	}
+
+	@Override
+	public boolean hasCustomInventoryName() {
+		return false;
+	}
+
+	@Override
+	public void markDirty() {
 	}
 }

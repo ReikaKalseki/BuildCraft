@@ -1,33 +1,32 @@
-/*
- * Copyright (c) SpaceToad, 2011-2012
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
- * 
+ *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.core.fluids;
 
-import com.google.common.collect.ForwardingList;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import com.google.common.collect.ForwardingList;
+
+import io.netty.buffer.ByteBuf;
+
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraftforge.common.ForgeDirection;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+
+import net.minecraftforge.common.util.ForgeDirection;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.fluids.FluidTankInfo;
 import net.minecraftforge.fluids.IFluidHandler;
 
-/**
- *
- * @author CovertJaguar <http://www.railcraft.info/>
- */
 public class TankManager<T extends Tank> extends ForwardingList<T> implements IFluidHandler, List<T> {
 
 	private List<T> tanks = new ArrayList<T>();
@@ -48,22 +47,26 @@ public class TankManager<T extends Tank> extends ForwardingList<T> implements IF
 	public int fill(ForgeDirection from, FluidStack resource, boolean doFill) {
 		for (Tank tank : tanks) {
 			int used = tank.fill(resource, doFill);
-			if (used > 0)
+			if (used > 0) {
 				return used;
+			}
 		}
 		return 0;
 	}
 
 	@Override
 	public FluidStack drain(ForgeDirection from, FluidStack resource, boolean doDrain) {
-		if (resource == null)
+		if (resource == null) {
 			return null;
+		}
 		for (Tank tank : tanks) {
-			if (!resource.isFluidEqual(tank.getFluid()))
+			if (!resource.isFluidEqual(tank.getFluid())) {
 				continue;
+			}
 			FluidStack drained = tank.drain(resource.amount, doDrain);
-			if (drained != null && drained.amount > 0)
+			if (drained != null && drained.amount > 0) {
 				return drained;
+			}
 		}
 		return null;
 	}
@@ -72,8 +75,9 @@ public class TankManager<T extends Tank> extends ForwardingList<T> implements IF
 	public FluidStack drain(ForgeDirection from, int maxDrain, boolean doDrain) {
 		for (Tank tank : tanks) {
 			FluidStack drained = tank.drain(maxDrain, doDrain);
-			if (drained != null && drained.amount > 0)
+			if (drained != null && drained.amount > 0) {
 				return drained;
+			}
 		}
 		return null;
 	}
@@ -109,12 +113,13 @@ public class TankManager<T extends Tank> extends ForwardingList<T> implements IF
 		}
 	}
 
-	public void writeData(DataOutputStream data) throws IOException {
+	public void writeData(ByteBuf data) {
 		for (Tank tank : tanks) {
 			FluidStack fluidStack = tank.getFluid();
 			if (fluidStack != null && fluidStack.getFluid() != null) {
 				data.writeShort(fluidStack.getFluid().getID());
 				data.writeInt(fluidStack.amount);
+				data.writeInt(fluidStack.getFluid().getColor(fluidStack));
 			} else {
 				data.writeShort(-1);
 			}
@@ -122,13 +127,16 @@ public class TankManager<T extends Tank> extends ForwardingList<T> implements IF
 	}
 
 	@SideOnly(Side.CLIENT)
-	public void readData(DataInputStream data) throws IOException {
+	public void readData(ByteBuf data) {
 		for (Tank tank : tanks) {
 			int fluidId = data.readShort();
-			if (fluidId > 0)
+			if (fluidId > 0) {
 				tank.setFluid(new FluidStack(fluidId, data.readInt()));
-			else
+				tank.colorRenderCache = data.readInt();
+			} else {
 				tank.setFluid(null);
+				tank.colorRenderCache = 0xFFFFFF;
+			}
 		}
 	}
 }

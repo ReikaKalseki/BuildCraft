@@ -1,27 +1,32 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.transport.triggers;
 
-import buildcraft.api.gates.ITriggerParameter;
-import buildcraft.api.transport.IPipe;
-import buildcraft.core.triggers.ActionTriggerIconProvider;
-import buildcraft.core.triggers.BCTrigger;
-import buildcraft.transport.ITriggerPipe;
-import buildcraft.transport.Pipe;
 import java.util.Locale;
 
-public class TriggerPipeSignal extends BCTrigger implements ITriggerPipe {
+import buildcraft.api.gates.ITrigger;
+import buildcraft.api.gates.ITriggerParameter;
+import buildcraft.api.transport.PipeWire;
+import buildcraft.core.triggers.ActionTriggerIconProvider;
+import buildcraft.core.triggers.BCTrigger;
+import buildcraft.core.utils.StringUtils;
+import buildcraft.transport.IPipeTrigger;
+import buildcraft.transport.Pipe;
+
+public class TriggerPipeSignal extends BCTrigger implements IPipeTrigger {
 
 	boolean active;
-	IPipe.WireColor color;
+	PipeWire color;
 
-	public TriggerPipeSignal(int legacyId, boolean active, IPipe.WireColor color) {
-		super(legacyId, "buildcraft.pipe.wire.input." + color.name().toLowerCase(Locale.ENGLISH) + (active ? ".active" : ".inactive"));
+	public TriggerPipeSignal(boolean active, PipeWire color) {
+		super("buildcraft:pipe.wire.input." + color.name().toLowerCase(Locale.ENGLISH) + (active ? ".active" : ".inactive"),
+				"buildcraft.pipe.wire.input." + color.name().toLowerCase(Locale.ENGLISH) + (active ? ".active" : ".inactive"));
 
 		this.active = active;
 		this.color = color;
@@ -34,66 +39,48 @@ public class TriggerPipeSignal extends BCTrigger implements ITriggerPipe {
 
 	@Override
 	public String getDescription() {
-		if (active) {
-			switch (color) {
-				case Red:
-					return "Red Pipe Signal On";
-				case Blue:
-					return "Blue Pipe Signal On";
-				case Green:
-					return "Green Pipe Signal On";
-				case Yellow:
-					return "Yellow Pipe Signal On";
-			}
-		} else {
-			switch (color) {
-				case Red:
-					return "Red Pipe Signal Off";
-				case Blue:
-					return "Blue Pipe Signal Off";
-				case Green:
-					return "Green Pipe Signal Off";
-				case Yellow:
-					return "Yellow Pipe Signal Off";
-			}
-		}
-
-		return "";
+		return String.format(StringUtils.localize("gate.trigger.pipe.wire." + (active ? "active" : "inactive")), StringUtils.localize("color." + color.name().toLowerCase(Locale.ENGLISH)));
 	}
 
 	@Override
 	public boolean isTriggerActive(Pipe pipe, ITriggerParameter parameter) {
-		if (active)
+		if (active) {
 			return pipe.signalStrength[color.ordinal()] > 0;
-		else
+		} else {
 			return pipe.signalStrength[color.ordinal()] == 0;
+		}
 	}
 
 	@Override
 	public int getIconIndex() {
 		if (active) {
 			switch (color) {
-				case Red:
+				case RED:
 					return ActionTriggerIconProvider.Trigger_PipeSignal_Red_Active;
-				case Blue:
+				case BLUE:
 					return ActionTriggerIconProvider.Trigger_PipeSignal_Blue_Active;
-				case Green:
+				case GREEN:
 					return ActionTriggerIconProvider.Trigger_PipeSignal_Green_Active;
-				case Yellow:
+				case YELLOW:
 					return ActionTriggerIconProvider.Trigger_PipeSignal_Yellow_Active;
 			}
 		} else {
 			switch (color) {
-				case Red:
+				case RED:
 					return ActionTriggerIconProvider.Trigger_PipeSignal_Red_Inactive;
-				case Blue:
+				case BLUE:
 					return ActionTriggerIconProvider.Trigger_PipeSignal_Blue_Inactive;
-				case Green:
+				case GREEN:
 					return ActionTriggerIconProvider.Trigger_PipeSignal_Green_Inactive;
-				case Yellow:
+				case YELLOW:
 					return ActionTriggerIconProvider.Trigger_PipeSignal_Yellow_Inactive;
 			}
 		}
 		return -1;
+	}
+
+	@Override
+	public ITrigger rotateLeft() {
+		return this;
 	}
 }

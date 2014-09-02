@@ -1,0 +1,231 @@
+// DON'T TOUCH THE BUILDSCTPT[] BLOCK
+// its special, and it is only there to make ForgeGradle work correctly.
+
+buildscript {
+    repositories {
+        mavenCentral()
+        maven {
+            name = "forge"
+            url = "http://files.minecraftforge.net/maven"
+        }
+        maven {
+            name = "sonatype"
+            url = "https://oss.sonatype.org/content/repositories/snapshots/"
+        }
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:1.2-SNAPSHOT'
+    }
+}
+
+apply plugin: 'forge' // adds the forge dependency
+apply plugin: 'maven' // for uploading to a maven repo
+apply plugin: 'checkstyle'
+
+version = "6.0.17"
+group= "com.mod-buildcraft"
+archivesBaseName = "buildcraft" // the name that all artifacts will use as a base. artifacts names follow this pattern: [baseName]-[appendix]-[version]-[classifier].[extension]
+
+minecraft {
+    version = "1.7.10-10.13.0.1179" // McVersion-ForgeVersion     this variable is later changed to contain only the MC version, while the apiVersion variable is used for the forge version.  Yeah its stupid, and will be changed eentually.
+
+    runDir = "run" // the directory for ForgeGradle to run Minecraft in
+
+    // replacing stuff in the source
+    replace '@VERSION@', project.version
+    replace '@MC_VERSION@', version
+}
+
+// configure  the source folders
+sourceSets {
+    main {
+        java {
+            srcDir 'common'
+            // exclude 'some exclusion'
+            // include 'some inclusion'
+        }
+        resources {
+            srcDir 'buildcraft_resources'
+            def l10n = file('../BuildCraft-Localization')
+            if(l10n.exists())
+                srcDir l10n
+            exclude '**/.md' // exclude readme from localization repo
+            // exclude 'some exclusion'
+            // include 'some inclusion'
+        }
+    }
+    api {
+		java {
+			srcDir 'api'
+		}
+    }
+}
+
+processResources
+{
+    // replace stuff in mcmod.info, nothing else
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+                
+        // replace version and mcversion
+        // ${version}   and    ${mcversion}    are the exact strings being replaced
+        expand 'version':project.version, 'mcversion':project.minecraft.version
+    }
+        
+    // copy everything else, that's not the mcmod.info
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
+}
+
+// --------------------
+// extra jar section
+// -------------------
+
+// add a source jar
+task sourceJar(type: Jar) {
+    from sourceSets.main.allSource
+    from sourceSets.api.allSource
+    classifier = 'sources'
+}
+
+// add api classes to javadoc
+javadoc {
+    source += sourceSets.api.allSource
+}
+
+// add a javadoc jar
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from 'build/docs/javadoc'
+}
+
+// because the normal output has been made to be obfuscated
+task deobfJar(type: Jar) {
+    from sourceSets.main.output
+    from sourceSets.api.output
+    classifier = 'dev'
+}
+
+task apiJar(type: Jar) {
+    from sourceSets.api.output
+    classifier = 'api'
+}
+
+// add api classes to main package
+jar {
+	from sourceSets.api.output
+}
+
+checkstyle {
+	configFile = file('guidelines/buildcraft.checkstyle')
+}
+
+// make sure all of these happen when we run build
+build.dependsOn sourceJar, javadocJar, deobfJar, apiJar
+
+// --------------------
+// maven section
+// -------------------
+
+// create the deployerJars dependency configuration
+configurations {
+    deployerJars
+}
+
+dependencies {
+    // dependency in deployerJars, for maven deployment. see definition in mavenDeployer{} below
+    deployerJars "org.apache.maven.wagon:wagon-ssh:2.2"
+}
+
+// specify artifacts to be uploaded
+artifacts {
+    // the default jar is already here by default
+    archives sourceJar
+    archives javadocJar
+    archives deobfJar
+    archives apiJar
+}
+
+uploadArchives {
+    // make sure this happens after reobfuscation
+    dependsOn 'reobf'
+
+    repositories {
+        if (project.hasProperty("filesmaven")) { // if this is the Forge server, and this stuff is defined...
+            logger.info('Publishing to files server')
+
+            mavenDeployer {
+                // specify the jars that maven needs to deploy here
+                configuration = configurations.deployerJars
+
+                // authentication, again, specially set in the forge server environment
+                repository(url: project.filesmaven.url) {
+                    authentication(userName: project.filesmaven.username, privateKey: project.filesmaven.key)
+                }
+
+                // here you specify all your metadata
+                // this is the definition of the maven pom.xml. This is simply a DSL to define the XML. Not actual fields or things to set.
+                pom {
+                    groupId = project.group
+                    version = project.version
+                    artifactId = project.archivesBaseName
+                    project {
+                        name project.archivesBaseName
+                        packaging 'jar'
+                        description 'A Minecraft mod adding all sorts of machinery'
+                        url 'http://www.mod-buildcraft.com/'
+
+                        scm {
+                            url 'https://github.com/BuildCraft/BuildCraft'
+                            connection 'scm:git:git://github.com/BuildCraft/BuildCraft.git'
+                            developerConnection 'scm:git:git@github.com:BuildCraft/BuildCraft.git'
+                        }
+
+                        issueManagement {
+                            system 'github'
+                            url 'https://github.com/BuildCraft/BuildCraft/issues'
+                        }
+
+                        licenses {
+                            license {
+                                name 'Minecraft Mod Public License'
+                                url 'http://www.mod-buildcraft.com/MMPL-1.0.txt'
+                                distribution 'repo'
+                            }
+                        }
+
+                        developers {
+                            developer {
+                                id 'SpaceToad'
+                                name 'SpaceToad'
+                                roles { role 'developer' }
+                            }
+                            developer {
+                                id 'CovertJaguar'
+                                name 'CovertJaguar'
+                                roles { role 'developer' }
+                            }
+                            developer {
+                                id 'SirSngir'
+                                name 'SirSengir'
+                                roles { role 'developer' }
+                            }   
+                            developer {
+                                id 'Krapht'
+                                name 'Krapht'
+                                roles { role 'developer' }
+                            }   
+
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // otherwise publishing to the local repo in ~/.m2 is fine...
+            add project.repositories.mavenLocal()
+        }
+    }
+}

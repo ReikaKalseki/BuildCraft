@@ -1,12 +1,20 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.core.fluids;
 
-import buildcraft.core.TileBuffer;
-import buildcraft.core.utils.Utils;
 import net.minecraft.block.Block;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraftforge.common.ForgeDirection;
+
+import net.minecraftforge.common.util.ForgeDirection;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidContainerRegistry;
 import net.minecraftforge.fluids.FluidRegistry;
@@ -14,11 +22,16 @@ import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.fluids.IFluidHandler;
 import net.minecraftforge.fluids.IFluidTank;
 
-/**
- *
- * @author CovertJaguar <http://www.railcraft.info/>
- */
-public class FluidUtils {
+import buildcraft.core.TileBuffer;
+import buildcraft.core.inventory.InvUtils;
+
+public final class FluidUtils {
+
+	/**
+	 * Deactivate constructor
+	 */
+	private FluidUtils() {
+	}
 
 	public static boolean handleRightClick(IFluidHandler tank, ForgeDirection side, EntityPlayer player, boolean fill, boolean drain) {
 		if (player == null) {
@@ -34,7 +47,8 @@ public class FluidUtils {
 
 				if (used > 0) {
 					if (!player.capabilities.isCreativeMode) {
-						player.inventory.setInventorySlotContents(player.inventory.currentItem, Utils.consumeItem(current));
+						player.inventory.setInventorySlotContents(player.inventory.currentItem, InvUtils.consumeItem(current));
+						player.inventory.markDirty();
 					}
 					return true;
 				}
@@ -51,12 +65,13 @@ public class FluidUtils {
 						if (current.stackSize > 1) {
 							if (!player.inventory.addItemStackToInventory(filled)) {
 								return false;
-							} else {
-								player.inventory.setInventorySlotContents(player.inventory.currentItem, Utils.consumeItem(current));
 							}
+							player.inventory.setInventorySlotContents(player.inventory.currentItem, InvUtils.consumeItem(current));
+							player.inventory.markDirty();
 						} else {
-							player.inventory.setInventorySlotContents(player.inventory.currentItem, Utils.consumeItem(current));
+							player.inventory.setInventorySlotContents(player.inventory.currentItem, InvUtils.consumeItem(current));
 							player.inventory.setInventorySlotContents(player.inventory.currentItem, filled);
+							player.inventory.markDirty();
 						}
 
 						tank.drain(side, liquid.amount, true);
@@ -68,12 +83,14 @@ public class FluidUtils {
 		return false;
 	}
 
-	public static int getFluidBlockId(Fluid fluid, boolean moving) {
-		if (fluid == FluidRegistry.WATER)
-			return moving ? Block.waterMoving.blockID : Block.waterStill.blockID;
-		if (fluid == FluidRegistry.LAVA)
-			return moving ? Block.lavaMoving.blockID : Block.lavaStill.blockID;
-		return fluid.getBlockID();
+	public static Block getFluidBlock(Fluid fluid, boolean moving) {
+		if (fluid == FluidRegistry.WATER) {
+			return moving ? Blocks.flowing_water : Blocks.water;
+		}
+		if (fluid == FluidRegistry.LAVA) {
+			return moving ? Blocks.flowing_lava : Blocks.lava;
+		}
+		return fluid.getBlock();
 	}
 
 	public static void pushFluidToConsumers(IFluidTank tank, int flowCap, TileBuffer[] tileBuffer) {
@@ -87,8 +104,9 @@ public class FluidUtils {
 					if (used > 0) {
 						amountToPush -= used;
 						tank.drain(used, true);
-						if (amountToPush <= 0)
+						if (amountToPush <= 0) {
 							return;
+						}
 					}
 				}
 			}

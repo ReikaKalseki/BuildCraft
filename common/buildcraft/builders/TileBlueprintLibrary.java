@@ -1,145 +1,100 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.builders;
 
-import buildcraft.BuildCraftBuilders;
-import buildcraft.core.TileBuildCraft;
-import buildcraft.core.blueprints.BptBase;
-import buildcraft.core.blueprints.BptPlayerIndex;
-import buildcraft.core.network.TileNetworkData;
-import buildcraft.core.proxy.CoreProxy;
-import buildcraft.core.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.CompressedStreamTools;
+import net.minecraft.nbt.NBTSizeTracker;
 import net.minecraft.nbt.NBTTagCompound;
 
-public class TileBlueprintLibrary extends TileBuildCraft implements IInventory {
-	public static final int COMMAND_NEXT = 1, COMMAND_PREV = 2, COMMAND_LOCK_UPDATE = 3, COMMAND_DELETE = 4;
+import buildcraft.BuildCraftBuilders;
+import buildcraft.builders.blueprints.BlueprintId;
+import buildcraft.builders.blueprints.BlueprintId.Kind;
+import buildcraft.core.TileBuildCraft;
+import buildcraft.core.blueprints.BlueprintBase;
+import buildcraft.core.inventory.SimpleInventory;
+import buildcraft.core.network.RPC;
+import buildcraft.core.network.RPCHandler;
+import buildcraft.core.network.RPCSide;
 
-	public ItemStack[] stack = new ItemStack[4];
+/**
+ * In this implementation, the blueprint library is the interface to the
+ * *local* player blueprint. The player will be able to load blueprint on his
+ * environment, and save blueprints to the server environment.
+ */
+public class TileBlueprintLibrary extends TileBuildCraft implements IInventory {
+	private static final int PROGRESS_TIME = 100;
+
+	public SimpleInventory inv = new SimpleInventory(4, "Blueprint Library", 1);
 
 	public int progressIn = 0;
 	public int progressOut = 0;
 
-	public String owner = "";
+	public ArrayList<BlueprintId> currentPage;
 
-	private ArrayList<BptBase> currentPage;
+	public int selected = -1;
 
-	public @TileNetworkData(staticSize = BuildCraftBuilders.LIBRARY_PAGE_SIZE)
-	String[] currentNames = new String[BuildCraftBuilders.LIBRARY_PAGE_SIZE];
-	public @TileNetworkData
-	int selected = -1;
+	public EntityPlayer uploadingPlayer = null;
+	public EntityPlayer downloadingPlayer = null;
 
-	public @TileNetworkData
-	boolean locked = false;
+	public int pageId = 0;
 
 	public TileBlueprintLibrary() {
-		for (int i = 0; i < currentNames.length; i++) {
-			currentNames[i] = "";
-		}
+
 	}
 
 	@Override
 	public void initialize() {
 		super.initialize();
-		if (CoreProxy.proxy.isSimulating(worldObj)) {
-			setCurrentPage(getNextPage(null));
+
+		if (worldObj.isRemote) {
+			setCurrentPage(BuildCraftBuilders.clientDB.getPage (pageId));
 		}
 	}
 
-	public ArrayList<BptBase> getNextPage(String after) {
-		ArrayList<BptBase> result = new ArrayList<BptBase>();
-
-		BptPlayerIndex index = BuildCraftBuilders.getPlayerIndex(BuildersProxy.getOwner(this));
-
-		String it = after;
-
-		while (result.size() < BuildCraftBuilders.LIBRARY_PAGE_SIZE) {
-			it = index.nextBpt(it);
-
-			if (it == null) {
-				break;
-			}
-
-			BptBase bpt = BuildCraftBuilders.getBptRootIndex().getBluePrint(it);
-
-			if (bpt != null) {
-				result.add(bpt);
-			}
-		}
-
-		return result;
-	}
-
-	public ArrayList<BptBase> getPrevPage(String before) {
-		ArrayList<BptBase> result = new ArrayList<BptBase>();
-
-		BptPlayerIndex index = BuildCraftBuilders.getPlayerIndex(BuildersProxy.getOwner(this));
-
-		String it = before;
-
-		while (result.size() < BuildCraftBuilders.LIBRARY_PAGE_SIZE) {
-			it = index.prevBpt(it);
-
-			if (it == null) {
-				break;
-			}
-
-			BptBase bpt = BuildCraftBuilders.getBptRootIndex().getBluePrint(it);
-
-			if (bpt != null) {
-				result.add(bpt);
-			}
-		}
-
-		return result;
-	}
-
-	public void updateCurrentNames() {
-		currentNames = new String[BuildCraftBuilders.LIBRARY_PAGE_SIZE];
-		for (int i = 0; i < currentPage.size(); i++) {
-			currentNames[i] = currentPage.get(i).getName();
-		}
-		for (int i = currentPage.size(); i < currentNames.length; i++) {
-			currentNames[i] = "";
-		}
-		sendNetworkUpdate();
-	}
-
-	public ArrayList<BptBase> getCurrentPage() {
-		return currentPage;
-	}
-
-	public void setCurrentPage(ArrayList<BptBase> newPage) {
+	public void setCurrentPage(ArrayList<BlueprintId> newPage) {
 		currentPage = newPage;
 		selected = -1;
-		updateCurrentNames();
 	}
 
-	public void setCurrentPage(boolean nextPage) {
-		int index = 0;
-		if (nextPage) {
-			index = currentPage.size() - 1;
+	public void pageNext () {
+		if (pageId < BuildCraftBuilders.clientDB.getPageNumber() - 1) {
+			pageId++;
 		}
-		if (currentPage.size() > 0) {
-			setCurrentPage(getNextPage(currentPage.get(index).file.getName()));
-		} else {
-			setCurrentPage(getNextPage(null));
+
+		setCurrentPage(BuildCraftBuilders.clientDB.getPage (pageId));
+	}
+
+	public void pagePrev () {
+		if (pageId > 0) {
+			pageId--;
 		}
+
+		setCurrentPage(BuildCraftBuilders.clientDB.getPage (pageId));
 	}
 
 	public void deleteSelectedBpt() {
-		BptPlayerIndex index = BuildCraftBuilders.getPlayerIndex(BuildersProxy.getOwner(this));
-		if (selected > -1 && selected < currentPage.size()) {
-			index.deleteBluePrint(currentPage.get(selected).file.getName());
-			if (currentPage.size() > 0) {
-				currentPage = getNextPage(index.prevBpt(currentPage.get(0).file.getName()));
-			} else {
-				currentPage = getNextPage(null);
+		if (selected != -1) {
+			BuildCraftBuilders.clientDB.deleteBlueprint(currentPage
+					.get(selected));
+
+			if (pageId > BuildCraftBuilders.clientDB.getPageNumber() - 1
+					&& pageId > 0) {
+				pageId--;
 			}
-			selected = -1;
-			updateCurrentNames();
+
+			setCurrentPage(BuildCraftBuilders.clientDB.getPage (pageId));
 		}
 	}
 
@@ -147,20 +102,14 @@ public class TileBlueprintLibrary extends TileBuildCraft implements IInventory {
 	public void readFromNBT(NBTTagCompound nbttagcompound) {
 		super.readFromNBT(nbttagcompound);
 
-		owner = nbttagcompound.getString("owner");
-		locked = nbttagcompound.getBoolean("locked");
-
-		Utils.readStacksFromNBT(nbttagcompound, "stack", stack);
+		inv.readFromNBT(nbttagcompound);
 	}
 
 	@Override
 	public void writeToNBT(NBTTagCompound nbttagcompound) {
 		super.writeToNBT(nbttagcompound);
 
-		nbttagcompound.setString("owner", owner);
-		nbttagcompound.setBoolean("locked", locked);
-
-		Utils.writeStacksToNBT(nbttagcompound, "stack", stack);
+		inv.writeToNBT(nbttagcompound);
 	}
 
 	@Override
@@ -170,29 +119,34 @@ public class TileBlueprintLibrary extends TileBuildCraft implements IInventory {
 
 	@Override
 	public ItemStack getStackInSlot(int i) {
-		return stack[i];
+		return inv.getStackInSlot(i);
 	}
 
 	@Override
 	public ItemStack decrStackSize(int i, int j) {
-		if (stack[i] == null)
-			return null;
+		ItemStack result = inv.decrStackSize(i, j);
 
-		ItemStack res = stack[i].splitStack(j);
-
-		if (stack[i].stackSize == 0) {
-			stack[i] = null;
+		if (i == 0) {
+			if (getStackInSlot(0) == null) {
+				progressIn = 0;
+			}
 		}
 
-		return res;
+		if (i == 2) {
+			if (getStackInSlot(2) == null) {
+				progressOut = 0;
+			}
+		}
+
+		return result;
 	}
 
 	@Override
 	public void setInventorySlotContents(int i, ItemStack itemstack) {
-		stack[i] = itemstack;
+		inv.setInventorySlotContents(i, itemstack);
 
 		if (i == 0) {
-			if (stack[0] != null && stack[0].getItem() instanceof ItemBptBase) {
+			if (getStackInSlot(0) != null && getStackInSlot(0).getItem() instanceof ItemBlueprint) {
 				progressIn = 1;
 			} else {
 				progressIn = 0;
@@ -200,7 +154,7 @@ public class TileBlueprintLibrary extends TileBuildCraft implements IInventory {
 		}
 
 		if (i == 2) {
-			if (stack[2] != null && stack[2].getItem() instanceof ItemBptBase) {
+			if (getStackInSlot(2) != null && getStackInSlot(2).getItem() instanceof ItemBlueprint) {
 				progressOut = 1;
 			} else {
 				progressOut = 0;
@@ -210,82 +164,147 @@ public class TileBlueprintLibrary extends TileBuildCraft implements IInventory {
 
 	@Override
 	public ItemStack getStackInSlotOnClosing(int slot) {
-		if (stack[slot] == null)
-			return null;
-		ItemStack toReturn = stack[slot];
-		stack[slot] = null;
-		return toReturn;
+		return inv.getStackInSlotOnClosing(slot);
 	}
 
 	@Override
-	public String getInvName() {
+	public String getInventoryName() {
 		return "";
 	}
 
 	@Override
 	public int getInventoryStackLimit() {
-		return 64;
+		return 1;
 	}
 
 	@Override
 	public boolean isItemValidForSlot(int i, ItemStack itemstack) {
-		// TODO Auto-generated method stub
 		return false;
 	}
 
 	@Override
 	public boolean isUseableByPlayer(EntityPlayer entityplayer) {
-		return worldObj.getBlockTileEntity(xCoord, yCoord, zCoord) == this;
+		return worldObj.getTileEntity(xCoord, yCoord, zCoord) == this;
 	}
 
 	@Override
-	public void openChest() {
+	public void openInventory() {
 	}
 
 	@Override
-	public void closeChest() {
+	public void closeInventory() {
 	}
 
 	@Override
 	public void updateEntity() {
 		super.updateEntity();
-		if (CoreProxy.proxy.isRenderWorld(worldObj))
-			return;
 
-		if (progressIn > 0 && progressIn < 100) {
+		if (worldObj.isRemote) {
+			return;
+		}
+
+		if (progressIn > 0 && progressIn < PROGRESS_TIME) {
 			progressIn++;
 		}
 
-		if (progressOut > 0 && progressOut < 100) {
+		if (progressOut > 0 && progressOut < PROGRESS_TIME) {
 			progressOut++;
 		}
 
-		if (progressIn == 100 && stack[1] == null) {
-			setInventorySlotContents(1, stack[0]);
+		// On progress IN, we'll download the blueprint from the server to the
+		// client, and then store it to the client.
+		if (progressIn == 100 && getStackInSlot(1) == null) {
+			setInventorySlotContents(1, getStackInSlot(0));
 			setInventorySlotContents(0, null);
-			BptBase bpt = BuildCraftBuilders.getBptRootIndex().getBluePrint(stack[1].getItemDamage());
 
-			if (bpt != null) {
-				BptPlayerIndex index = BuildCraftBuilders.getPlayerIndex(BuildersProxy.getOwner(this));
+			BlueprintBase bpt = ItemBlueprint.loadBlueprint(getStackInSlot(1));
 
-				try {
-					index.addBlueprint(bpt.file);
-					setCurrentPage(true);
-					setCurrentPage(false);
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
+			if (bpt != null && uploadingPlayer != null) {
+				RPCHandler.rpcPlayer(this, "downloadBlueprintToClient",
+						uploadingPlayer, bpt.id, bpt.getData());
+				uploadingPlayer = null;
 			}
 		}
 
-		if (progressOut == 100 && stack[3] == null) {
+		if (progressOut == 100 && getStackInSlot(3) == null) {
+			RPCHandler.rpcPlayer(this, "requestSelectedBlueprint",
+					downloadingPlayer);
+			progressOut = 0;
+		}
+	}
+
+	@Override
+	public boolean hasCustomInventoryName() {
+		return false;
+	}
+
+	@RPC (RPCSide.CLIENT)
+	public void requestSelectedBlueprint () {
+		if (isOuputConsistent()) {
 			if (selected > -1 && selected < currentPage.size()) {
-				BptBase bpt = currentPage.get(selected);
-				setInventorySlotContents(3, BuildCraftBuilders.getBptItemStack(stack[2].itemID, bpt.position, bpt.getName()));
+				BlueprintBase bpt = BuildCraftBuilders.clientDB
+						.load(currentPage.get(selected));
+
+				RPCHandler.rpcServer(this, "uploadBlueprintToServer", bpt.id,
+						bpt.getData());
 			} else {
-				setInventorySlotContents(3, BuildCraftBuilders.getBptItemStack(stack[2].itemID, 0, null));
+				RPCHandler.rpcServer(this, "uploadBlueprintToServer", null,
+						null);
 			}
-			setInventorySlotContents(2, null);
 		}
+	}
+
+	@RPC (RPCSide.SERVER)
+	public void uploadBlueprintToServer (BlueprintId id, byte [] data) {
+		try {
+			if (data != null) {
+				NBTTagCompound nbt = CompressedStreamTools.func_152457_a(data, NBTSizeTracker.field_152451_a);
+				BlueprintBase bpt = BlueprintBase.loadBluePrint(nbt);
+				bpt.setData(data);
+				bpt.id = id;
+				BuildCraftBuilders.serverDB.add(bpt);
+				setInventorySlotContents(3, bpt.getStack());
+			} else {
+				setInventorySlotContents(3, getStackInSlot(2));
+			}
+
+			setInventorySlotContents(2, null);
+
+			downloadingPlayer = null;
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+	@RPC (RPCSide.CLIENT)
+	public void downloadBlueprintToClient (BlueprintId id, byte [] data) {
+		try {
+			NBTTagCompound nbt = CompressedStreamTools.func_152457_a(data, NBTSizeTracker.field_152451_a);
+			BlueprintBase bpt = BlueprintBase.loadBluePrint(nbt);
+			bpt.setData(data);
+			bpt.id = id;
+
+			BuildCraftBuilders.clientDB.add(bpt);
+			setCurrentPage(BuildCraftBuilders.clientDB.getPage(pageId));
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+	public void selectBlueprint (int index) {
+		selected = index;
+	}
+
+	private boolean isOuputConsistent () {
+		if (selected == -1 || getStackInSlot(2) == null) {
+			return false;
+		}
+
+		return (getStackInSlot(2).getItem() instanceof ItemBlueprintStandard
+				&& currentPage.get(selected).kind == Kind.Blueprint) ||
+				(getStackInSlot(2).getItem() instanceof ItemBlueprintTemplate
+				&& currentPage.get(selected).kind == Kind.Template);
 	}
 }

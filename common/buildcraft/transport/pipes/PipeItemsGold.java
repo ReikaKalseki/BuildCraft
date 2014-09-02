@@ -1,30 +1,34 @@
 /**
- * BuildCraft is open-source. It is distributed under the terms of the
- * BuildCraft Open Source License. It grants rights to read, modify, compile or
- * run the code. It does *NOT* grant the right to redistribute this software or
- * its modifications in any form, binary or source, except if expressively
- * granted by the copyright holder.
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.transport.pipes;
 
+import net.minecraft.item.Item;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
 import buildcraft.BuildCraftTransport;
 import buildcraft.api.core.IIconProvider;
-import buildcraft.api.core.Position;
-import buildcraft.core.utils.Utils;
-import buildcraft.transport.IPipeTransportItemsHook;
+import buildcraft.core.utils.MathUtils;
 import buildcraft.transport.Pipe;
 import buildcraft.transport.PipeIconProvider;
 import buildcraft.transport.PipeTransportItems;
+import buildcraft.transport.TransportConstants;
 import buildcraft.transport.TravelingItem;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
-import java.util.LinkedList;
-import net.minecraftforge.common.ForgeDirection;
+import buildcraft.transport.pipes.events.PipeEventItem;
 
-public class PipeItemsGold extends Pipe implements IPipeTransportItemsHook {
+public class PipeItemsGold extends Pipe {
 
-	public PipeItemsGold(int itemID) {
-		super(new PipeTransportItems(), itemID);
+	public PipeItemsGold(Item item) {
+		super(new PipeTransportItems(), item);
 	}
 
 	@Override
@@ -38,18 +42,9 @@ public class PipeItemsGold extends Pipe implements IPipeTransportItemsHook {
 		return PipeIconProvider.TYPE.PipeItemsGold.ordinal();
 	}
 
-	@Override
-	public LinkedList<ForgeDirection> filterPossibleMovements(LinkedList<ForgeDirection> possibleOrientations, Position pos, TravelingItem item) {
-		return possibleOrientations;
-	}
-
-	@Override
-	public void entityEntered(TravelingItem item, ForgeDirection orientation) {
-		readjustSpeed(item);
-	}
-
-	@Override
-	public void readjustSpeed(TravelingItem item) {
-		item.setSpeed(Math.min(Math.max(Utils.pipeNormalSpeed, item.getSpeed()) * 2f, Utils.pipeNormalSpeed * 20F));
+	public void eventHandler(PipeEventItem.AdjustSpeed event) {
+		event.handled = true;
+		TravelingItem item = event.item;
+		item.setSpeed(MathUtils.clamp(item.getSpeed() * 4F, TransportConstants.PIPE_NORMAL_SPEED * 4F, TransportConstants.PIPE_NORMAL_SPEED * 15F));
 	}
 }

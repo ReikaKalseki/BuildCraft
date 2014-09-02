@@ -1,35 +1,58 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.core;
 
-import buildcraft.BuildCraftCore;
-import buildcraft.core.proxy.CoreProxy;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
-import net.minecraftforge.common.Property;
+
+import net.minecraft.command.ICommandSender;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ChatComponentText;
+
+import cpw.mods.fml.common.Loader;
+import cpw.mods.fml.common.event.FMLInterModComms;
+
+import net.minecraftforge.common.config.Property;
+
+import buildcraft.BuildCraftCore;
+import buildcraft.api.core.BCLog;
+import buildcraft.core.proxy.CoreProxy;
 
 public class Version implements Runnable {
-
-	private static Version instance = new Version();
-
 	public enum EnumUpdateState {
-
 		CURRENT, OUTDATED, CONNECTION_ERROR
 	}
+
 	public static final String VERSION = "@VERSION@";
-	public static final String BUILD_NUMBER = "@BUILD_NUMBER@";
-	private static final String REMOTE_VERSION_FILE = "http://bit.ly/buildcraftver";
-	private static final String REMOTE_CHANGELOG_ROOT = "https://dl.dropbox.com/u/44760587/buildcraft/changelog/";
 	public static EnumUpdateState currentVersion = EnumUpdateState.CURRENT;
 	public static final int FORGE_VERSION_MAJOR = 4;
 	public static final int FORGE_VERSION_MINOR = 0;
 	public static final int FORGE_VERSION_PATCH = 0;
+
+	private static final String REMOTE_VERSION_FILE =
+			"https://raw.githubusercontent.com/BuildCraft/BuildCraft/master/buildcraft_resources/versions.txt";
+
+	private static final String REMOTE_CHANGELOG_ROOT =
+			"https://raw.githubusercontent.com/BuildCraft/BuildCraft/master/buildcraft_resources/changelog/";
+
 	private static String recommendedVersion;
 	private static String[] cachedChangelog;
 
+	private static Version instance = new Version();
+
+	private static boolean sentIMCOutdatedMessage = false;
+
 	public static String getVersion() {
-		return VERSION + " (:" + BUILD_NUMBER + ")";
+		return VERSION;
 	}
 
 	public static boolean isOutdated() {
@@ -37,15 +60,17 @@ public class Version implements Runnable {
 	}
 
 	public static boolean needsUpdateNoticeAndMarkAsSeen() {
-		if (!isOutdated())
+		if (!isOutdated() || sentIMCOutdatedMessage) {
 			return false;
+		}
 
 		Property property = BuildCraftCore.mainConfiguration.get("vars", "version.seen", VERSION);
 		property.comment = "indicates the last version the user has been informed about and will suppress further notices on it.";
 		String seenVersion = property.getString();
 
-		if (recommendedVersion == null || recommendedVersion.equals(seenVersion))
+		if (recommendedVersion == null || recommendedVersion.equals(seenVersion)) {
 			return false;
+		}
 
 		property.set(recommendedVersion);
 		BuildCraftCore.mainConfiguration.save();
@@ -59,16 +84,18 @@ public class Version implements Runnable {
 	public static void versionCheck() {
 		try {
 
-			if ("0.0.0".equals(VERSION))
+			if ("0.0.0".equals(VERSION)) {
 				return;
+			}
 
 			String location = REMOTE_VERSION_FILE;
 			HttpURLConnection conn = null;
 			while (location != null && !location.isEmpty()) {
 				URL url = new URL(location);
 
-				if (conn != null)
+				if (conn != null) {
 					conn.disconnect();
+				}
 
 				conn = (HttpURLConnection) url.openConnection();
 				conn.setRequestProperty("User-Agent",
@@ -77,22 +104,22 @@ public class Version implements Runnable {
 				location = conn.getHeaderField("Location");
 			}
 
-			if (conn == null)
+			if (conn == null) {
 				throw new NullPointerException();
+			}
 
 			BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
 
 			String line;
 			String mcVersion = CoreProxy.proxy.getMinecraftVersion();
 			while ((line = reader.readLine()) != null) {
-				if (line.startsWith(mcVersion)) {
-					if (line.contains(DefaultProps.MOD)) {
-
-						String[] tokens = line.split(":");
+				String[] tokens = line.split(":");
+				if (mcVersion.matches(tokens[0])) {
+					if (DefaultProps.MOD.matches(tokens[1])) {
 						recommendedVersion = tokens[2];
 
-						if (line.endsWith(VERSION)) {
-							BuildCraftCore.bcLog.finer("Using the latest version [" + getVersion() + "] for Minecraft " + mcVersion);
+						if (VERSION.matches(tokens[2])) {
+							BCLog.logger.finer("Using the latest version [" + getVersion() + "] for Minecraft " + mcVersion);
 							currentVersion = EnumUpdateState.CURRENT;
 							return;
 						}
@@ -100,15 +127,16 @@ public class Version implements Runnable {
 				}
 			}
 
-			BuildCraftCore.bcLog.warning("Using outdated version [" + VERSION + " (build:" + BUILD_NUMBER + ")] for Minecraft " + mcVersion
-					+ ". Consider updating.");
+			BCLog.logger.warning("Using outdated version [" + VERSION + "] for Minecraft " + mcVersion
+					+ ". Consider updating to " + recommendedVersion + ".");
 			currentVersion = EnumUpdateState.OUTDATED;
+			sendIMCOutdatedMessage();
 
 			conn.disconnect();
 			reader.close();
 		} catch (Exception e) {
-			BuildCraftCore.bcLog.warning("Unable to read from remote version authority.");
-			BuildCraftCore.bcLog.warning(e.toString());
+			BCLog.logger.warning("Unable to read from remote version authority.");
+			BCLog.logger.warning(e.toString());
 			currentVersion = EnumUpdateState.CONNECTION_ERROR;
 		}
 	}
@@ -124,14 +152,14 @@ public class Version implements Runnable {
 	public static String[] grabChangelog(String version) {
 
 		try {
-
 			String location = REMOTE_CHANGELOG_ROOT + version;
 			HttpURLConnection conn = null;
 			while (location != null && !location.isEmpty()) {
 				URL url = new URL(location);
 
-				if (conn != null)
+				if (conn != null) {
 					conn.disconnect();
+				}
 
 				conn = (HttpURLConnection) url.openConnection();
 				conn.setRequestProperty("User-Agent",
@@ -140,18 +168,15 @@ public class Version implements Runnable {
 				location = conn.getHeaderField("Location");
 			}
 
-			if (conn == null)
+			if (conn == null) {
 				throw new NullPointerException();
+			}
 
 			BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-			conn.disconnect();
 
 			String line;
 			ArrayList<String> changelog = new ArrayList<String>();
 			while ((line = reader.readLine()) != null) {
-				if (line.startsWith("#")) {
-					continue;
-				}
 				if (line.isEmpty()) {
 					continue;
 				}
@@ -159,11 +184,13 @@ public class Version implements Runnable {
 				changelog.add(line);
 			}
 
+			conn.disconnect();
+
 			return changelog.toArray(new String[0]);
 
 		} catch (Exception ex) {
 			ex.printStackTrace();
-			BuildCraftCore.bcLog.warning("Unable to read changelog from remote site.");
+			BCLog.logger.warning("Unable to read changelog from remote site.");
 		}
 
 		return new String[]{String.format("Unable to retrieve changelog for %s %s", DefaultProps.MOD, version)};
@@ -175,7 +202,7 @@ public class Version implements Runnable {
 		int count = 0;
 		currentVersion = null;
 
-		BuildCraftCore.bcLog.info("Beginning version check");
+		BCLog.logger.info("Beginning version check");
 
 		try {
 			while ((count < 3) && ((currentVersion == null) || (currentVersion == EnumUpdateState.CONNECTION_ERROR))) {
@@ -183,7 +210,7 @@ public class Version implements Runnable {
 				count++;
 
 				if (currentVersion == EnumUpdateState.CONNECTION_ERROR) {
-					BuildCraftCore.bcLog.info("Version check attempt " + count + " failed, trying again in 10 seconds");
+					BCLog.logger.info("Version check attempt " + count + " failed, trying again in 10 seconds");
 					Thread.sleep(10000);
 				}
 			}
@@ -192,13 +219,51 @@ public class Version implements Runnable {
 		}
 
 		if (currentVersion == EnumUpdateState.CONNECTION_ERROR) {
-			BuildCraftCore.bcLog.info("Version check failed");
+			BCLog.logger.info("Version check failed");
 		}
 
 	}
 
-	public static void check() {
+	/**
+	 * This is an integration with Dynious Version Checker See
+	 * http://www.minecraftforum.net/topic/2721902-
+	 */
+	public static void sendIMCOutdatedMessage() {
+		if (Loader.isModLoaded("VersionChecker")) {
+			NBTTagCompound compound = new NBTTagCompound();
+			compound.setString("modDisplayName", "BuildCraft");
+			compound.setString("oldVersion", VERSION);
+			compound.setString("newVersion", getRecommendedVersion());
 
+			compound.setString("updateUrl", "http://www.mod-buildcraft.com/download/");
+			compound.setBoolean("isDirectLink", false);
+
+			StringBuilder stringBuilder = new StringBuilder();
+			for (String changeLogLine : getChangelog()) {
+				stringBuilder.append(changeLogLine).append("\n");
+			}
+			compound.setString("changeLog", stringBuilder.toString());
+
+			FMLInterModComms.sendRuntimeMessage("BuildCraft|Core", "VersionChecker", "addUpdate", compound);
+			sentIMCOutdatedMessage = true;
+		}
+	}
+
+	public static void displayChangelog(ICommandSender sender) {
+		int nb = 0;
+		for (String updateLine : Version.getChangelog()) {
+			sender.addChatMessage(new ChatComponentText("\u00A79" + updateLine));
+
+			nb++;
+
+			if (nb > 3) {
+				sender.addChatMessage(new ChatComponentText("\u00A79[...]"));
+				break;
+			}
+		}
+	}
+
+	public static void check() {
 		new Thread(instance).start();
 	}
 }

@@ -1,11 +1,20 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.factory.gui;
 
-import buildcraft.core.gui.BuildCraftContainer;
-import buildcraft.factory.TileHopper;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.inventory.Slot;
+
+import buildcraft.core.gui.BuildCraftContainer;
+import buildcraft.factory.TileHopper;
 
 public class ContainerHopper extends BuildCraftContainer {
 

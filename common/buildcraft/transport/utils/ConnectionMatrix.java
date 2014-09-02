@@ -1,26 +1,41 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.transport.utils;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.util.BitSet;
-import net.minecraftforge.common.ForgeDirection;
+import io.netty.buffer.ByteBuf;
+
+import net.minecraftforge.common.util.ForgeDirection;
 
 public class ConnectionMatrix {
-
-	private BitSet _connected = new BitSet(ForgeDirection.VALID_DIRECTIONS.length);
-	private final BitSetCodec _bitSetCodec = new BitSetCodec();
+	private int mask = 0;
 	private boolean dirty = false;
 
 	public boolean isConnected(ForgeDirection direction) {
-		return _connected.get(direction.ordinal());
+		// test if the direction.ordinal()'th bit of mask is set
+		return (mask & (1 << direction.ordinal())) != 0;
 	}
 
 	public void setConnected(ForgeDirection direction, boolean value) {
-		if (_connected.get(direction.ordinal()) != value) {
-			_connected.set(direction.ordinal(), value);
+		if (isConnected(direction) != value) {
+			// invert the direction.ordinal()'th bit of mask
+			mask ^= 1 << direction.ordinal();
 			dirty = true;
 		}
+	}
+
+	/**
+	 * Return a mask representing the connectivity for all sides.
+	 *
+	 * @return mask in ForgeDirection order, least significant bit = first entry
+	 */
+	public int getMask() {
+		return mask;
 	}
 
 	public boolean isDirty() {
@@ -31,15 +46,15 @@ public class ConnectionMatrix {
 		dirty = false;
 	}
 
-	public void writeData(DataOutputStream data) throws IOException {
-		data.writeByte(_bitSetCodec.encode(_connected));
+	public void writeData(ByteBuf data) {
+		data.writeByte(mask);
 	}
 
-	public void readData(DataInputStream data) throws IOException {
-		BitSet connection = new BitSet(ForgeDirection.VALID_DIRECTIONS.length);
-		_bitSetCodec.decode(data.readByte(), connection);
-		if (!_connected.equals(connection)) {
-			_connected = connection;
+	public void readData(ByteBuf data) {
+		byte newMask = data.readByte();
+
+		if (newMask != mask) {
+			mask = newMask;
 			dirty = true;
 		}
 	}

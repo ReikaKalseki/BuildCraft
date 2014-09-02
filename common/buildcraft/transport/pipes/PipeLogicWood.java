@@ -1,20 +1,22 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.transport.pipes;
 
-import buildcraft.api.tools.IToolWrench;
-import buildcraft.core.TileBuffer;
-import buildcraft.core.proxy.CoreProxy;
-import buildcraft.transport.Pipe;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.Item;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraftforge.common.ForgeDirection;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.api.tools.IToolWrench;
+import buildcraft.core.TileBuffer;
+import buildcraft.transport.Pipe;
 
 public abstract class PipeLogicWood {
 
@@ -37,7 +39,7 @@ public abstract class PipeLogicWood {
 		}
 
 		if (newFacing != null && newFacing.ordinal() != meta) {
-			pipe.container.worldObj.setBlockMetadataWithNotify(pipe.container.xCoord, pipe.container.yCoord, pipe.container.zCoord, newFacing.ordinal(), 3);
+			pipe.container.getWorldObj().setBlockMetadataWithNotify(pipe.container.xCoord, pipe.container.yCoord, pipe.container.zCoord, newFacing.ordinal(), 3);
 			pipe.container.scheduleRenderUpdate();
 		}
 	}
@@ -57,11 +59,13 @@ public abstract class PipeLogicWood {
 
 	private boolean isValidFacing(ForgeDirection side) {
 		TileBuffer[] tileBuffer = pipe.container.getTileCache();
-		if (tileBuffer == null)
+		if (tileBuffer == null) {
 			return true;
+		}
 
-		if (!tileBuffer[side.ordinal()].exists())
+		if (!tileBuffer[side.ordinal()].exists()) {
 			return true;
+		}
 
 		TileEntity tile = tileBuffer[side.ordinal()].getTile();
 		return isValidConnectingTile(tile);
@@ -70,7 +74,7 @@ public abstract class PipeLogicWood {
 	protected abstract boolean isValidConnectingTile(TileEntity tile);
 
 	public void initialize() {
-		if (!CoreProxy.proxy.isRenderWorld(pipe.container.worldObj)) {
+		if (!pipe.container.getWorldObj().isRemote) {
 			switchSourceIfNeeded();
 		}
 	}
@@ -87,7 +91,7 @@ public abstract class PipeLogicWood {
 	}
 
 	public void onNeighborBlockChange(int blockId) {
-		if (!CoreProxy.proxy.isRenderWorld(pipe.container.worldObj)) {
+		if (!pipe.container.getWorldObj().isRemote) {
 			switchSourceIfNeeded();
 		}
 	}

@@ -1,65 +1,72 @@
 /**
- * BuildCraft is open-source. It is distributed under the terms of the
- * BuildCraft Open Source License. It grants rights to read, modify, compile or
- * run the code. It does *NOT* grant the right to redistribute this software or
- * its modifications in any form, binary or source, except if expressively
- * granted by the copyright holder.
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.transport.pipes;
 
-import buildcraft.BuildCraftTransport;
-import buildcraft.api.core.IIconProvider;
-import buildcraft.api.core.Position;
-import buildcraft.api.gates.IAction;
-import buildcraft.api.tools.IToolWrench;
-import buildcraft.core.network.TileNetworkData;
-import buildcraft.core.utils.EnumColor;
-import buildcraft.core.utils.Utils;
-import buildcraft.transport.IPipeTransportItemsHook;
-import buildcraft.transport.Pipe;
-import buildcraft.transport.PipeIconProvider;
-import buildcraft.transport.PipeTransportItems;
-import buildcraft.transport.TileGenericPipe;
-import buildcraft.transport.TravelingItem;
-import buildcraft.transport.triggers.ActionPipeColor;
-import buildcraft.transport.triggers.ActionPipeDirection;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Map;
+
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.Item;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraftforge.common.ForgeDirection;
 
-public class PipeItemsDaizuli extends Pipe<PipeTransportItems> implements IPipeTransportItemsHook {
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.BuildCraftTransport;
+import buildcraft.api.core.IIconProvider;
+import buildcraft.api.core.NetworkData;
+import buildcraft.api.gates.IAction;
+import buildcraft.api.tools.IToolWrench;
+import buildcraft.core.utils.EnumColor;
+import buildcraft.transport.Pipe;
+import buildcraft.transport.PipeIconProvider;
+import buildcraft.transport.PipeTransportItems;
+import buildcraft.transport.TileGenericPipe;
+import buildcraft.transport.TransportConstants;
+import buildcraft.transport.TravelingItem;
+import buildcraft.transport.pipes.events.PipeEventItem;
+import buildcraft.transport.triggers.ActionPipeColor;
+import buildcraft.transport.triggers.ActionPipeDirection;
+
+public class PipeItemsDaizuli extends Pipe<PipeTransportItems> {
 
 	private int standardIconIndex = PipeIconProvider.TYPE.PipeItemsDaizuli_Black.ordinal();
 	private int solidIconIndex = PipeIconProvider.TYPE.PipeAllDaizuli_Solid.ordinal();
-	@TileNetworkData
-	private int color = EnumColor.WHITE.ordinal();
+	@NetworkData
+	private int color = EnumColor.BLACK.ordinal();
 	private PipeLogicIron logic = new PipeLogicIron(this) {
 		@Override
 		protected boolean isValidConnectingTile(TileEntity tile) {
 			if (tile instanceof TileGenericPipe) {
 				Pipe otherPipe = ((TileGenericPipe) tile).pipe;
-				if (otherPipe instanceof PipeItemsWood)
+				if (otherPipe instanceof PipeItemsWood) {
 					return false;
-				if (otherPipe.transport instanceof PipeTransportItems)
+				}
+				if (otherPipe.transport instanceof PipeTransportItems) {
 					return true;
+				}
 				return false;
 			}
-			if (tile instanceof IInventory)
+			if (tile instanceof IInventory) {
 				return true;
+			}
 			return false;
 		}
 	};
 
-	public PipeItemsDaizuli(int itemID) {
-		super(new PipeTransportItems(), itemID);
+	public PipeItemsDaizuli(Item item) {
+		super(new PipeTransportItems(), item);
 
 		transport.allowBouncing = true;
 	}
@@ -101,10 +108,12 @@ public class PipeItemsDaizuli extends Pipe<PipeTransportItems> implements IPipeT
 
 	@Override
 	public int getIconIndex(ForgeDirection direction) {
-		if (direction == ForgeDirection.UNKNOWN)
+		if (direction == ForgeDirection.UNKNOWN) {
 			return standardIconIndex + color;
-		if (container != null && container.getBlockMetadata() == direction.ordinal())
+		}
+		if (container != null && container.getBlockMetadata() == direction.ordinal()) {
 			return standardIconIndex + color;
+		}
 		return solidIconIndex;
 	}
 
@@ -119,33 +128,27 @@ public class PipeItemsDaizuli extends Pipe<PipeTransportItems> implements IPipeT
 		return true;
 	}
 
-	@Override
-	public LinkedList<ForgeDirection> filterPossibleMovements(LinkedList<ForgeDirection> possibleOrientations, Position pos, TravelingItem item) {
-		LinkedList<ForgeDirection> newMovements = new LinkedList<ForgeDirection>();
-		EnumColor c = getColor();
-		for (ForgeDirection dir : possibleOrientations) {
-			if (item.color == c) {
-				if (dir.ordinal() == container.getBlockMetadata())
-					newMovements.add(dir);
-			} else if (dir.ordinal() != container.getBlockMetadata()) {
-				newMovements.add(dir);
-			}
+	public void eventHandler(PipeEventItem.FindDest event) {
+		ForgeDirection output = ForgeDirection.getOrientation(container.getBlockMetadata());
+		if (event.item.color == getColor() && event.destinations.contains(output)) {
+			event.destinations.clear();
+			event.destinations.add(output);
+			return;
 		}
-		return newMovements;
+		event.destinations.remove(output);
 	}
 
-	@Override
-	public void entityEntered(TravelingItem item, ForgeDirection orientation) {
-	}
+	public void eventHandler(PipeEventItem.AdjustSpeed event) {
+		event.handled = true;
+		TravelingItem item = event.item;
 
-	@Override
-	public void readjustSpeed(TravelingItem item) {
-		if (item.getSpeed() > Utils.pipeNormalSpeed)
-			item.setSpeed(item.getSpeed() - Utils.pipeNormalSpeed / 4.0F);
+		if (item.getSpeed() > TransportConstants.PIPE_NORMAL_SPEED) {
+			item.setSpeed(item.getSpeed() - TransportConstants.PIPE_NORMAL_SPEED / 4.0F);
+		}
 
-
-		if (item.getSpeed() < Utils.pipeNormalSpeed)
-			item.setSpeed(Utils.pipeNormalSpeed);
+		if (item.getSpeed() < TransportConstants.PIPE_NORMAL_SPEED) {
+			item.setSpeed(TransportConstants.PIPE_NORMAL_SPEED);
+		}
 	}
 
 	@Override
@@ -172,8 +175,9 @@ public class PipeItemsDaizuli extends Pipe<PipeTransportItems> implements IPipeT
 		LinkedList<IAction> action = super.getActions();
 		action.addAll(Arrays.asList(BuildCraftTransport.actionPipeColor));
 		for (ForgeDirection direction : ForgeDirection.VALID_DIRECTIONS) {
-			if (container.isPipeConnected(direction))
+			if (container.isPipeConnected(direction)) {
 				action.add(BuildCraftTransport.actionPipeDirection[direction.ordinal()]);
+			}
 		}
 		return action;
 	}

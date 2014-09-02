@@ -1,19 +1,35 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.builders;
 
-import buildcraft.BuildCraftBuilders;
-import net.minecraft.util.Icon;
+import cpw.mods.fml.client.registry.ClientRegistry;
+import cpw.mods.fml.client.registry.RenderingRegistry;
+
+import buildcraft.builders.urbanism.RenderBoxProvider;
+import buildcraft.core.render.RenderBlockMultiTexture;
 
 public class BuilderProxyClient extends BuilderProxy {
-	public static Icon fillerFillAllTexture;
-	public static Icon fillerClearTexture;
-	public static Icon fillerWallsTexture;
-	public static Icon fillerStairsTexture;
-	public static Icon fillerFlattenTexture;
-	public static Icon fillerHorizonTexture;
-	public static Icon fillerPyramidTexture;
 
-    @Override
+	@Override
 	public void registerClientHook() {
-		BuildCraftBuilders.addHook(new ClientBuilderHook());
+
+	}
+
+	@Override
+	public void registerBlockRenderers() {
+		super.registerBlockRenderers();
+
+		RenderingRegistry.registerBlockHandler(new RenderBlockMultiTexture());
+
+		ClientRegistry.bindTileEntitySpecialRenderer(TileArchitect.class, new RenderBoxProvider());
+		ClientRegistry.bindTileEntitySpecialRenderer(TileFiller.class, new RenderBuilder());
+		ClientRegistry.bindTileEntitySpecialRenderer(TileBuilder.class, new RenderBuilder());
+		ClientRegistry.bindTileEntitySpecialRenderer(TilePathMarker.class, new RenderPathMarker());
 	}
 }

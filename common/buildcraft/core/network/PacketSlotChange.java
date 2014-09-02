@@ -1,10 +1,18 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.core.network;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import io.netty.buffer.ByteBuf;
+
 import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompressedStreamTools;
+
+import buildcraft.core.utils.Utils;
 
 public class PacketSlotChange extends PacketCoordinates {
 
@@ -21,53 +29,18 @@ public class PacketSlotChange extends PacketCoordinates {
 	}
 
 	@Override
-	public void writeData(DataOutputStream data) throws IOException {
-
+	public void writeData(ByteBuf data) {
 		super.writeData(data);
 
 		data.writeInt(slot);
-		if (stack != null) {
-			data.writeInt(stack.itemID);
-			data.writeInt(stack.stackSize);
-			data.writeInt(stack.getItemDamage());
-			
-			if(stack.hasTagCompound()) {
-				byte[] compressed = CompressedStreamTools.compress(stack.getTagCompound());
-				data.writeShort(compressed.length);
-				data.write(compressed);
-			} else {
-				data.writeShort(0);
-			}
-
-		} else {
-			data.writeInt(0);
-		}
+		Utils.writeStack(data, stack);		
 	}
 
 	@Override
-	public void readData(DataInputStream data) throws IOException {
-
+	public void readData(ByteBuf data) {
 		super.readData(data);
 
 		this.slot = data.readInt();
-		int id = data.readInt();
-
-		if (id != 0) {
-			stack = new ItemStack(id, data.readInt(), data.readInt());
-			
-			// Yes, this stuff may indeed have NBT and don't you forget it.
-			short length = data.readShort();
-			
-			if(length > 0) {
-				byte[] compressed = new byte[length];
-				data.readFully(compressed);
-				stack.setTagCompound(CompressedStreamTools.decompress(compressed));
-			}
-
-
-		} else {
-			stack = null;
-		}
+		stack = Utils.readStack(data);
 	}
-
 }

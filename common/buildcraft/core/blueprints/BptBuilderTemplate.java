@@ -1,86 +1,109 @@
 /**
- * Copyright (c) SpaceToad, 2011-2012
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
  *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
-
 package buildcraft.core.blueprints;
 
-import buildcraft.core.IBuilderInventory;
-import buildcraft.core.blueprints.BptSlot.Mode;
 import java.util.LinkedList;
+
 import net.minecraft.item.ItemStack;
 import net.minecraft.world.World;
 
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.api.blueprints.SchematicBlockBase;
+import buildcraft.api.blueprints.SchematicRegistry;
+import buildcraft.api.core.BuildCraftAPI;
+import buildcraft.api.core.IInvSlot;
+import buildcraft.builders.TileAbstractBuilder;
+import buildcraft.core.BlockIndex;
+import buildcraft.core.blueprints.BuildingSlotBlock.Mode;
+import buildcraft.core.inventory.InventoryIterator;
+import buildcraft.core.utils.BlockUtil;
+
 public class BptBuilderTemplate extends BptBuilderBase {
 
-	LinkedList<BptSlot> clearList = new LinkedList<BptSlot>();
-	LinkedList<BptSlot> buildList = new LinkedList<BptSlot>();
+	private LinkedList<BuildingSlotBlock> buildList = new LinkedList<BuildingSlotBlock>();
+	private BuildingSlotIterator iterator;
 
-	public BptBuilderTemplate(BptBase bluePrint, World world, int x, int y, int z) {
+	public BptBuilderTemplate(BlueprintBase bluePrint, World world, int x, int y, int z) {
 		super(bluePrint, world, x, y, z);
+	}
 
-		for (int j = bluePrint.sizeY - 1; j >= 0; --j) {
-			for (int i = 0; i < bluePrint.sizeX; ++i) {
-				for (int k = 0; k < bluePrint.sizeZ; ++k) {
-					int xCoord = i + x - bluePrint.anchorX;
-					int yCoord = j + y - bluePrint.anchorY;
-					int zCoord = k + z - bluePrint.anchorZ;
+	@Override
+	protected void initialize () {
+		if (blueprint.excavate) {
+			for (int j = blueprint.sizeY - 1; j >= 0; --j) {
+				for (int i = 0; i < blueprint.sizeX; ++i) {
+					for (int k = 0; k < blueprint.sizeZ; ++k) {
+						int xCoord = i + x - blueprint.anchorX;
+						int yCoord = j + y - blueprint.anchorY;
+						int zCoord = k + z - blueprint.anchorZ;
 
-					BptSlot slot = bluePrint.contents[i][j][k];
+						if (yCoord < 0 || yCoord >= context.world.getHeight()) {
+							continue;
+						}
 
-					if (slot == null || slot.blockId == 0) {
-						slot = new BptSlot();
-						slot.meta = 0;
-						slot.blockId = 0;
-						slot.x = xCoord;
-						slot.y = yCoord;
-						slot.z = zCoord;
+						SchematicBlockBase slot = blueprint.contents[i][j][k];
 
-						slot.mode = Mode.ClearIfInvalid;
+						if (slot == null
+								&& !clearedLocations.contains(new BlockIndex(
+										xCoord, yCoord, zCoord))) {
+							BuildingSlotBlock b = new BuildingSlotBlock();
 
-						clearList.add(slot);
+							b.schematic = null;
+							b.x = xCoord;
+							b.y = yCoord;
+							b.z = zCoord;
+							b.mode = Mode.ClearIfInvalid;
+							b.buildStage = 0;
+
+							buildList.add(b);
+						}
 					}
 				}
 			}
 		}
 
-		for (int j = 0; j < bluePrint.sizeY; ++j) {
-			for (int i = 0; i < bluePrint.sizeX; ++i) {
-				for (int k = 0; k < bluePrint.sizeZ; ++k) {
-					int xCoord = i + x - bluePrint.anchorX;
-					int yCoord = j + y - bluePrint.anchorY;
-					int zCoord = k + z - bluePrint.anchorZ;
+		for (int j = 0; j < blueprint.sizeY; ++j) {
+			for (int i = 0; i < blueprint.sizeX; ++i) {
+				for (int k = 0; k < blueprint.sizeZ; ++k) {
+					int xCoord = i + x - blueprint.anchorX;
+					int yCoord = j + y - blueprint.anchorY;
+					int zCoord = k + z - blueprint.anchorZ;
 
-					BptSlot slot = bluePrint.contents[i][j][k];
-
-					if (slot != null) {
-						slot = slot.clone();
-					} else {
-						slot = new BptSlot();
-						slot.meta = 0;
-						slot.blockId = 0;
+					if (yCoord < 0 || yCoord >= context.world.getHeight()) {
+						continue;
 					}
 
-					slot.x = xCoord;
-					slot.y = yCoord;
-					slot.z = zCoord;
+					SchematicBlockBase slot = blueprint.contents[i][j][k];
 
-					slot.mode = Mode.Build;
+					if (slot != null && !builtLocations.contains(new BlockIndex(xCoord, yCoord, zCoord))) {
+						BuildingSlotBlock b = new BuildingSlotBlock();
 
-					if (slot.blockId != 0) {
-						buildList.add(slot);
+						b.schematic = slot;
+						b.x = xCoord;
+						b.y = yCoord;
+						b.z = zCoord;
+
+						b.mode = Mode.Build;
+						b.buildStage = 1;
+
+						buildList.add(b);
 					}
 				}
 			}
 		}
+
+		iterator = new BuildingSlotIterator(buildList);
 	}
 
 	private void checkDone() {
-		if (clearList.size() == 0 && buildList.size() == 0) {
+		if (buildList.size() == 0) {
 			done = true;
 		} else {
 			done = false;
@@ -88,25 +111,14 @@ public class BptBuilderTemplate extends BptBuilderBase {
 	}
 
 	@Override
-	public BptSlot getNextBlock(World world, IBuilderInventory inv) {
-		if (clearList.size() != 0) {
-			BptSlot slot = internalGetNextBlock(world, inv, clearList);
-			checkDone();
-
-			if (slot != null)
-				return slot;
-			else
-				return null;
-		}
-
+	public BuildingSlot getNextBlock(World world, TileAbstractBuilder inv) {
 		if (buildList.size() != 0) {
-			BptSlot slot = internalGetNextBlock(world, inv, buildList);
+			BuildingSlotBlock slot = internalGetNextBlock(world, inv, buildList);
 			checkDone();
 
-			if (slot != null)
+			if (slot != null) {
 				return slot;
-			else
-				return null;
+			}
 		}
 
 		checkDone();
@@ -114,37 +126,71 @@ public class BptBuilderTemplate extends BptBuilderBase {
 		return null;
 	}
 
-	public BptSlot internalGetNextBlock(World world, IBuilderInventory inv, LinkedList<BptSlot> list) {
-		BptSlot result = null;
+	public BuildingSlotBlock internalGetNextBlock(World world, TileAbstractBuilder builder, LinkedList<BuildingSlotBlock> list) {
+		BuildingSlotBlock result = null;
 
-		while (list.size() > 0) {
-			BptSlot slot = list.getFirst();
+		IInvSlot firstSlotToConsume = null;
 
-			// Note from CJ: I have no idea what this code is supposed to do, so I'm not touching it.
-			if (slot.blockId == world.getBlockId(slot.x, slot.y, slot.z)) {
-				list.removeFirst();
-			} else if (slot.mode == Mode.ClearIfInvalid) {
-				result = slot;
-				list.removeFirst();
+		for (IInvSlot invSlot : InventoryIterator.getIterable(builder, ForgeDirection.UNKNOWN)) {
+			if (!builder.isBuildingMaterialSlot(invSlot.getIndex())) {
+				continue;
+			}
+
+			ItemStack stack = invSlot.getStackInSlot();
+
+			if (stack != null && stack.stackSize > 0) {
+				firstSlotToConsume = invSlot;
 				break;
-			} else {
-				int size = inv.getSizeInventory();
-				for (int i = 0; i < size; ++i) {
-					if (!inv.isBuildingMaterial(i)) {
-						continue;
-					}
+			}
+		}
 
-					ItemStack stack = inv.decrStackSize(i, 1);
+		iterator.startIteration();
 
-					if (stack != null && stack.stackSize > 0) {
-						result = slot.clone();
-						result.stackToUse = stack;
-						list.removeFirst();
+		while (iterator.hasNext()) {
+			BuildingSlotBlock slot = iterator.next();
+
+			if (slot.buildStage > buildList.getFirst().buildStage) {
+				iterator.reset ();
+				return null;
+			}
+
+			if (BlockUtil.isUnbreakableBlock(world, slot.x, slot.y, slot.z)) {
+				iterator.remove();
+				if (slot.mode == Mode.ClearIfInvalid) {
+					clearedLocations.add(new BlockIndex(slot.x, slot.y, slot.z));
+				} else {
+					builtLocations.add(new BlockIndex(slot.x, slot.y, slot.z));
+				}
+			} else if (slot.mode == Mode.ClearIfInvalid) {
+				if (BuildCraftAPI.isSoftBlock(world, slot.x, slot.y, slot.z)) {
+					iterator.remove();
+					clearedLocations.add(new BlockIndex(slot.x, slot.y, slot.z));
+				} else {
+					if (setupForDestroy(builder, context, slot)) {
+						result = slot;
+						iterator.remove();
+						clearedLocations.add(new BlockIndex(slot.x, slot.y, slot.z));
+
 						break;
 					}
 				}
+			} else if (slot.mode == Mode.Build) {
+				if (!BuildCraftAPI.isSoftBlock(world, slot.x, slot.y, slot.z)) {
+					iterator.remove();
+					builtLocations.add(new BlockIndex(slot.x, slot.y, slot.z));
+				} else {
+					if (builder.energyAvailable() > SchematicRegistry.BUILD_ENERGY && firstSlotToConsume != null) {
+						builder.consumeEnergy(SchematicRegistry.BUILD_ENERGY);
 
-				break;
+						slot.addStackConsumed(firstSlotToConsume
+								.decreaseStackInSlot());
+						result = slot;
+						iterator.remove();
+						builtLocations.add(new BlockIndex(slot.x, slot.y, slot.z));
+
+						break;
+					}
+				}
 			}
 		}
 

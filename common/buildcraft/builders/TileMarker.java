@@ -1,35 +1,37 @@
-/** 
- * Copyright (c) SpaceToad, 2011
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
- * 
- * BuildCraft is distributed under the terms of the Minecraft Mod Public 
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
-
 package buildcraft.builders;
+
+import net.minecraft.block.Block;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.world.World;
 
 import buildcraft.BuildCraftBuilders;
 import buildcraft.api.core.IAreaProvider;
-import buildcraft.api.core.LaserKind;
+import buildcraft.api.core.NetworkData;
 import buildcraft.api.core.Position;
 import buildcraft.core.EntityBlock;
+import buildcraft.core.LaserKind;
 import buildcraft.core.TileBuildCraft;
 import buildcraft.core.network.PacketUpdate;
-import buildcraft.core.network.TileNetworkData;
 import buildcraft.core.proxy.CoreProxy;
 import buildcraft.core.utils.Utils;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.world.World;
 
 public class TileMarker extends TileBuildCraft implements IAreaProvider {
-
 	private static int maxSize = 64;
 
 	public static class TileWrapper {
 
-		public @TileNetworkData
-		int x, y, z;
+		@NetworkData
+		public int x, y, z;
+		private TileMarker marker;
 
 		public TileWrapper() {
 			x = Integer.MAX_VALUE;
@@ -43,18 +45,20 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 			this.z = z;
 		}
 
-		private TileMarker marker;
-
 		public boolean isSet() {
 			return x != Integer.MAX_VALUE;
 		}
 
 		public TileMarker getMarker(World world) {
-			if (!isSet())
+			if (!isSet()) {
 				return null;
+			}
 
 			if (marker == null) {
-				marker = (TileMarker) world.getBlockTileEntity(x, y, z);
+				TileEntity tile = world.getTileEntity(x, y, z);
+				if (tile instanceof TileMarker) {
+					marker = (TileMarker) tile;
+				}
 			}
 
 			return marker;
@@ -68,29 +72,30 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 	}
 
 	public static class Origin {
+		@NetworkData
+		public TileWrapper vectO = new TileWrapper();
+		@NetworkData
+		public TileWrapper[] vect = {new TileWrapper(), new TileWrapper(), new TileWrapper()};
+		@NetworkData
+		public int xMin, yMin, zMin, xMax, yMax, zMax;
 
 		public boolean isSet() {
 			return vectO.isSet();
 		}
-
-		public @TileNetworkData
-		TileWrapper vectO = new TileWrapper();
-		public @TileNetworkData(staticSize = 3)
-		TileWrapper[] vect = { new TileWrapper(), new TileWrapper(), new TileWrapper() };
-		public @TileNetworkData
-		int xMin, yMin, zMin, xMax, yMax, zMax;
 	}
 
-	public @TileNetworkData
-	Origin origin = new Origin();
+	@NetworkData
+	public Origin origin = new Origin();
+	@NetworkData
+	public boolean showSignals = false;
 
+	private Position initVectO;
+	private Position[] initVect;
 	private EntityBlock[] lasers;
 	private EntityBlock[] signals;
-	public @TileNetworkData
-	boolean showSignals = false;
 
 	public void updateSignals() {
-		if (CoreProxy.proxy.isSimulating(worldObj)) {
+		if (!worldObj.isRemote) {
 			showSignals = worldObj.isBlockIndirectlyGettingPowered(xCoord, yCoord, zCoord);
 			sendNetworkUpdate();
 		}
@@ -130,8 +135,6 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 		}
 	}
 
-	private Position initVectO, initVect[];
-
 	@Override
 	public void initialize() {
 		super.initialize();
@@ -145,15 +148,16 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 
 			for (int i = 0; i < 3; ++i) {
 				if (initVect[i] != null) {
-					linkTo((TileMarker) worldObj.getBlockTileEntity((int) initVect[i].x, (int) initVect[i].y, (int) initVect[i].z), i);
+					linkTo((TileMarker) worldObj.getTileEntity((int) initVect[i].x, (int) initVect[i].y, (int) initVect[i].z), i);
 				}
 			}
 		}
 	}
 
 	public void tryConnection() {
-		if (CoreProxy.proxy.isRenderWorld(worldObj))
+		if (worldObj.isRemote) {
 			return;
+		}
 
 		for (int j = 0; j < 3; ++j) {
 			if (!origin.isSet() || !origin.vect[j].isSet()) {
@@ -165,8 +169,6 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 	}
 
 	void setVect(int n) {
-		int markerId = BuildCraftBuilders.markerBlock.blockID;
-
 		int[] coords = new int[3];
 
 		coords[0] = xCoord;
@@ -177,10 +179,10 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 			for (int j = 1; j < maxSize; ++j) {
 				coords[n] += j;
 
-				int blockId = worldObj.getBlockId(coords[0], coords[1], coords[2]);
+				Block block = worldObj.getBlock(coords[0], coords[1], coords[2]);
 
-				if (blockId == markerId) {
-					TileMarker marker = (TileMarker) worldObj.getBlockTileEntity(coords[0], coords[1], coords[2]);
+				if (block == BuildCraftBuilders.markerBlock) {
+					TileMarker marker = (TileMarker) worldObj.getTileEntity(coords[0], coords[1], coords[2]);
 
 					if (linkTo(marker, n)) {
 						break;
@@ -190,10 +192,10 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 				coords[n] -= j;
 				coords[n] -= j;
 
-				blockId = worldObj.getBlockId(coords[0], coords[1], coords[2]);
+				block = worldObj.getBlock(coords[0], coords[1], coords[2]);
 
-				if (blockId == markerId) {
-					TileMarker marker = (TileMarker) worldObj.getBlockTileEntity(coords[0], coords[1], coords[2]);
+				if (block == BuildCraftBuilders.markerBlock) {
+					TileMarker marker = (TileMarker) worldObj.getTileEntity(coords[0], coords[1], coords[2]);
 
 					if (linkTo(marker, n)) {
 						break;
@@ -206,11 +208,13 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 	}
 
 	private boolean linkTo(TileMarker marker, int n) {
-		if (marker == null)
+		if (marker == null) {
 			return false;
+		}
 
-		if (origin.isSet() && marker.origin.isSet())
+		if (origin.isSet() && marker.origin.isSet()) {
 			return false;
+		}
 
 		if (!origin.isSet() && !marker.origin.isSet()) {
 			origin = new Origin();
@@ -282,43 +286,49 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 
 	@Override
 	public int xMin() {
-		if (origin.isSet())
+		if (origin.isSet()) {
 			return origin.xMin;
+		}
 		return xCoord;
 	}
 
 	@Override
 	public int yMin() {
-		if (origin.isSet())
+		if (origin.isSet()) {
 			return origin.yMin;
+		}
 		return yCoord;
 	}
 
 	@Override
 	public int zMin() {
-		if (origin.isSet())
+		if (origin.isSet()) {
 			return origin.zMin;
+		}
 		return zCoord;
 	}
 
 	@Override
 	public int xMax() {
-		if (origin.isSet())
+		if (origin.isSet()) {
 			return origin.xMax;
+		}
 		return xCoord;
 	}
 
 	@Override
 	public int yMax() {
-		if (origin.isSet())
+		if (origin.isSet()) {
 			return origin.yMax;
+		}
 		return yCoord;
 	}
 
 	@Override
 	public int zMax() {
-		if (origin.isSet())
+		if (origin.isSet()) {
 			return origin.zMax;
+		}
 		return zCoord;
 	}
 
@@ -391,29 +401,30 @@ public class TileMarker extends TileBuildCraft implements IAreaProvider {
 
 		signals = null;
 
-		if (CoreProxy.proxy.isSimulating(worldObj) && markerOrigin != null && markerOrigin != this) {
+		if (!worldObj.isRemote && markerOrigin != null && markerOrigin != this) {
 			markerOrigin.sendNetworkUpdate();
 		}
 	}
 
 	@Override
 	public void removeFromWorld() {
-		if (!origin.isSet())
+		if (!origin.isSet()) {
 			return;
+		}
 
 		Origin o = origin;
 
 		for (TileWrapper m : o.vect.clone()) {
 			if (m.isSet()) {
-				worldObj.setBlock(m.x, m.y, m.z, 0);
+				worldObj.setBlockToAir(m.x, m.y, m.z);
 
-				BuildCraftBuilders.markerBlock.dropBlockAsItem(worldObj, m.x, m.y, m.z, BuildCraftBuilders.markerBlock.blockID, 0);
+				BuildCraftBuilders.markerBlock.dropBlockAsItem(worldObj, m.x, m.y, m.z, 0, 0);
 			}
 		}
 
-		worldObj.setBlock(o.vectO.x, o.vectO.y, o.vectO.z, 0);
+		worldObj.setBlockToAir(o.vectO.x, o.vectO.y, o.vectO.z);
 
-		BuildCraftBuilders.markerBlock.dropBlockAsItem(worldObj, o.vectO.x, o.vectO.y, o.vectO.z, BuildCraftBuilders.markerBlock.blockID, 0);
+		BuildCraftBuilders.markerBlock.dropBlockAsItem(worldObj, o.vectO.x, o.vectO.y, o.vectO.z, 0, 0);
 	}
 
 	@Override

@@ -1,32 +1,37 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.factory.render;
+
+import org.lwjgl.opengl.GL11;
+
+import net.minecraft.client.model.ModelBase;
+import net.minecraft.client.model.ModelRenderer;
+import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
+import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.ResourceLocation;
+
+import net.minecraftforge.fluids.FluidStack;
 
 import buildcraft.core.DefaultProps;
 import buildcraft.core.IInventoryRenderer;
 import buildcraft.core.fluids.Tank;
 import buildcraft.core.render.FluidRenderer;
+import buildcraft.core.render.RenderUtils;
 import buildcraft.factory.TileRefinery;
-import net.minecraft.client.model.ModelBase;
-import net.minecraft.client.model.ModelRenderer;
-import net.minecraft.client.renderer.tileentity.TileEntityRenderer;
-import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.fluids.FluidStack;
-import org.lwjgl.opengl.GL11;
 
 public class RenderRefinery extends TileEntitySpecialRenderer implements IInventoryRenderer {
 
 	private static final ResourceLocation TEXTURE = new ResourceLocation(DefaultProps.TEXTURE_PATH_BLOCKS + "/refinery.png");
 	private static final float pixel = (float) (1.0 / 16.0);
 	private final ModelRenderer tank;
-	private final ModelRenderer magnet[] = new ModelRenderer[4];
+	private final ModelRenderer[] magnet = new ModelRenderer[4];
 	private final ModelBase model = new ModelBase() {
 	};
 
@@ -50,7 +55,7 @@ public class RenderRefinery extends TileEntitySpecialRenderer implements IInvent
 
 		}
 
-		setTileEntityRenderer(TileEntityRenderer.instance);
+		field_147501_a = TileEntityRendererDispatcher.instance;
 	}
 
 	public RenderRefinery(String baseTexture) {
@@ -70,6 +75,7 @@ public class RenderRefinery extends TileEntitySpecialRenderer implements IInvent
 
 	private void render(TileRefinery tile, double x, double y, double z) {
 		FluidStack liquid1 = null, liquid2 = null, liquidResult = null;
+		int color1 = 0xFFFFFF, color2 = 0xFFFFFF, colorResult = 0xFFFFFF;
 
 		float anim = 0;
 		int angle = 0;
@@ -77,20 +83,23 @@ public class RenderRefinery extends TileEntitySpecialRenderer implements IInvent
 		if (tile != null) {
 			if (tile.tank1.getFluid() != null) {
 				liquid1 = tile.tank1.getFluid();
+				color1 = tile.tank1.colorRenderCache;
 			}
 
 			if (tile.tank2.getFluid() != null) {
 				liquid2 = tile.tank2.getFluid();
+				color2 = tile.tank2.colorRenderCache;
 			}
 
 			if (tile.result.getFluid() != null) {
 				liquidResult = tile.result.getFluid();
+				colorResult = tile.result.colorRenderCache;
 			}
 
 			anim = tile.getAnimationStage();
 
 			angle = 0;
-			switch (tile.worldObj.getBlockMetadata(tile.xCoord, tile.yCoord, tile.zCoord)) {
+			switch (tile.getWorldObj().getBlockMetadata(tile.xCoord, tile.yCoord, tile.zCoord)) {
 				case 2:
 					angle = 90;
 					break;
@@ -179,23 +188,23 @@ public class RenderRefinery extends TileEntitySpecialRenderer implements IInvent
 			GL11.glScalef(0.5F, 1, 0.5F);
 
 			if (liquid1 != null && liquid1.amount > 0) {
-				int[] list1 = FluidRenderer.getFluidDisplayLists(liquid1, tile.worldObj, false);
+				int[] list1 = FluidRenderer.getFluidDisplayLists(liquid1, tile.getWorldObj(), false);
 
 				if (list1 != null) {
 					bindTexture(FluidRenderer.getFluidSheet(liquid1));
-					FluidRenderer.setColorForFluidStack(liquid1);
+					RenderUtils.setGLColorFromInt(color1);
 					GL11.glCallList(list1[getDisplayListIndex(tile.tank1)]);
 				}
 			}
 
 			if (liquid2 != null && liquid2.amount > 0) {
-				int[] list2 = FluidRenderer.getFluidDisplayLists(liquid2, tile.worldObj, false);
+				int[] list2 = FluidRenderer.getFluidDisplayLists(liquid2, tile.getWorldObj(), false);
 
 				if (list2 != null) {
 					GL11.glPushMatrix();
 					GL11.glTranslatef(0, 0, 1);
 					bindTexture(FluidRenderer.getFluidSheet(liquid2));
-					FluidRenderer.setColorForFluidStack(liquid2);
+					RenderUtils.setGLColorFromInt(color2);
 					GL11.glCallList(list2[getDisplayListIndex(tile.tank2)]);
 					GL11.glPopMatrix();
 				}
@@ -203,13 +212,13 @@ public class RenderRefinery extends TileEntitySpecialRenderer implements IInvent
 
 
 			if (liquidResult != null && liquidResult.amount > 0) {
-				int[] list3 = FluidRenderer.getFluidDisplayLists(liquidResult, tile.worldObj, false);
+				int[] list3 = FluidRenderer.getFluidDisplayLists(liquidResult, tile.getWorldObj(), false);
 
 				if (list3 != null) {
 					GL11.glPushMatrix();
 					GL11.glTranslatef(1, 0, 0.5F);
 					bindTexture(FluidRenderer.getFluidSheet(liquidResult));
-					FluidRenderer.setColorForFluidStack(liquidResult);
+					RenderUtils.setGLColorFromInt(colorResult);
 					GL11.glCallList(list3[getDisplayListIndex(tile.result)]);
 					GL11.glPopMatrix();
 				}

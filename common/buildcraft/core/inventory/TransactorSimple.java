@@ -1,12 +1,23 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.core.inventory;
 
-import buildcraft.core.inventory.InventoryIterator.IInvSlot;
-import buildcraft.core.inventory.filters.IStackFilter;
 import java.util.ArrayList;
 import java.util.List;
+
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.ItemStack;
-import net.minecraftforge.common.ForgeDirection;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.api.core.IInvSlot;
+import buildcraft.core.inventory.filters.IStackFilter;
 
 public class TransactorSimple extends Transactor {
 
@@ -34,27 +45,31 @@ public class TransactorSimple extends Transactor {
 		injected = tryPut(stack, filledSlots, injected, doAdd);
 		injected = tryPut(stack, emptySlots, injected, doAdd);
 
-		inventory.onInventoryChanged();
+		inventory.markDirty();
 		return injected;
 	}
 
 	private int tryPut(ItemStack stack, List<IInvSlot> slots, int injected, boolean doAdd) {
-		if (injected >= stack.stackSize) {
-			return injected;
+		int realInjected = injected;
+
+		if (realInjected >= stack.stackSize) {
+			return realInjected;
 		}
+
 		for (IInvSlot slot : slots) {
 			ItemStack stackInSlot = slot.getStackInSlot();
-			if (stackInSlot == null || StackHelper.instance().canStacksMerge(stackInSlot, stack)) {
-				int used = addToSlot(slot, stack, injected, doAdd);
+			if (stackInSlot == null || StackHelper.canStacksMerge(stackInSlot, stack)) {
+				int used = addToSlot(slot, stack, realInjected, doAdd);
 				if (used > 0) {
-					injected += used;
-					if (injected >= stack.stackSize) {
-						return injected;
+					realInjected += used;
+					if (realInjected >= stack.stackSize) {
+						return realInjected;
 					}
 				}
 			}
 		}
-		return injected;
+
+		return realInjected;
 	}
 
 	/**
@@ -80,7 +95,7 @@ public class TransactorSimple extends Transactor {
 			return wanted;
 		}
 
-		if (!StackHelper.instance().canStacksMerge(stack, stackInSlot)) {
+		if (!StackHelper.canStacksMerge(stack, stackInSlot)) {
 			return 0;
 		}
 

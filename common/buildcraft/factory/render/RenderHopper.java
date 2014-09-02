@@ -1,17 +1,27 @@
+/**
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
+ */
 package buildcraft.factory.render;
+
+import org.lwjgl.opengl.GL11;
+
+import net.minecraft.client.model.ModelBase;
+import net.minecraft.client.model.ModelRenderer;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
+import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.ResourceLocation;
 
 import buildcraft.BuildCraftCore;
 import buildcraft.BuildCraftCore.RenderMode;
 import buildcraft.core.DefaultProps;
 import buildcraft.core.IInventoryRenderer;
-import net.minecraft.client.model.ModelBase;
-import net.minecraft.client.model.ModelRenderer;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.tileentity.TileEntityRenderer;
-import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.ResourceLocation;
-import org.lwjgl.opengl.GL11;
 
 public class RenderHopper extends TileEntitySpecialRenderer implements IInventoryRenderer {
 
@@ -35,7 +45,7 @@ public class RenderHopper extends TileEntitySpecialRenderer implements IInventor
 		bottom.rotationPointX = 8F;
 		bottom.rotationPointY = 8F;
 		bottom.rotationPointZ = 8F;
-		setTileEntityRenderer(TileEntityRenderer.instance);
+		field_147501_a = TileEntityRendererDispatcher.instance;
 	}
 
 	@Override
@@ -49,8 +59,9 @@ public class RenderHopper extends TileEntitySpecialRenderer implements IInventor
 	}
 
 	private void render(double x, double y, double z) {
-		if (BuildCraftCore.render == RenderMode.NoDynamic)
+		if (BuildCraftCore.render == RenderMode.NoDynamic) {
 			return;
+		}
 
 		GL11.glPushMatrix();
 		GL11.glDisable(GL11.GL_LIGHTING);

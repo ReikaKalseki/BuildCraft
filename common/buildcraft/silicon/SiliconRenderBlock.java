@@ -1,22 +1,25 @@
 /**
- * Copyright (c) SpaceToad, 2011
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
  *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
-
 package buildcraft.silicon;
 
-import buildcraft.core.utils.Utils;
-import cpw.mods.fml.client.registry.ISimpleBlockRenderingHandler;
+import org.lwjgl.opengl.GL11;
+
 import net.minecraft.block.Block;
 import net.minecraft.client.renderer.RenderBlocks;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.world.IBlockAccess;
-import net.minecraftforge.common.ForgeDirection;
-import org.lwjgl.opengl.GL11;
+
+import cpw.mods.fml.client.registry.ISimpleBlockRenderingHandler;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.core.CoreConstants;
 
 public class SiliconRenderBlock implements ISimpleBlockRenderingHandler {
 	@Override
@@ -25,7 +28,7 @@ public class SiliconRenderBlock implements ISimpleBlockRenderingHandler {
 	}
 
 	@Override
-	public boolean shouldRender3DInInventory() {
+	public boolean shouldRender3DInInventory(int modelId) {
 		return true;
 	}
 
@@ -121,7 +124,7 @@ public class SiliconRenderBlock implements ISimpleBlockRenderingHandler {
 
 	@Override
 	public void renderInventoryBlock(Block block, int i, int j, RenderBlocks renderblocks) {
-		block.setBlockBounds(Utils.pipeMinPos, 0.0F, Utils.pipeMinPos, Utils.pipeMaxPos, 1.0F, Utils.pipeMaxPos);
+		block.setBlockBounds(CoreConstants.PIPE_MIN_POS, 0.0F, CoreConstants.PIPE_MIN_POS, CoreConstants.PIPE_MAX_POS, 1.0F, CoreConstants.PIPE_MAX_POS);
 		GL11.glTranslatef(-0.5F, -0.5F, -0.5F);
 
 		block.setBlockBounds(0.0F, 0.0F, 0.0F, 1, 4F / 16F, 1);
@@ -168,23 +171,4 @@ public class SiliconRenderBlock implements ISimpleBlockRenderingHandler {
 		renderblocks.renderFaceXPos(block, 0.0D, 0.0D, 0.0D, block.getIcon(5, i));
 		tessellator.draw();
 	}
-
-	/*
-	 * @Override public GuiScreen handleGUI(int i) { switch (Utils.intToPacketId(i)) { case AssemblyTableGUI: return new GuiAssemblyTable(
-	 * ModLoader.getMinecraftInstance().thePlayer.inventory, new TileAssemblyTable()); default: return null; } }
-	 */
-
-	/*
-	 * @Override public void handlePacket(Packet230ModLoader packet) { switch (PacketIds.values()[packet.packetType]) { case AssemblyTableSelect: GuiScreen
-	 * screen = ModLoader.getMinecraftInstance().currentScreen;
-	 *
-	 * if (screen instanceof GuiAssemblyTable) { GuiAssemblyTable gui = (GuiAssemblyTable) screen; SelectionMessage message = new SelectionMessage();
-	 *
-	 * TileAssemblyTable.selectionMessageWrapper.updateFromPacket(message, packet);
-	 *
-	 * gui.handleSelectionMessage (message); }
-	 *
-	 * break; } }
-	 */
-
 }

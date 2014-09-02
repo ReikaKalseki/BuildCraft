@@ -1,116 +1,126 @@
 /**
- * Copyright (c) SpaceToad, 2011
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
  *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
-
 package buildcraft.builders;
+
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockContainer;
+import net.minecraft.block.material.Material;
+import net.minecraft.client.renderer.texture.IIconRegister;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.IIcon;
+import net.minecraft.world.IBlockAccess;
+import net.minecraft.world.World;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+
+import net.minecraftforge.common.util.ForgeDirection;
 
 import buildcraft.BuildCraftBuilders;
 import buildcraft.api.filler.IFillerPattern;
 import buildcraft.core.CreativeTabBuildCraft;
 import buildcraft.core.GuiIds;
-import buildcraft.core.proxy.CoreProxy;
 import buildcraft.core.utils.Utils;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
-import java.util.ArrayList;
-import net.minecraft.block.BlockContainer;
-import net.minecraft.block.material.Material;
-import net.minecraft.client.renderer.texture.IconRegister;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.item.ItemStack;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Icon;
-import net.minecraft.world.IBlockAccess;
-import net.minecraft.world.World;
 
 public class BlockFiller extends BlockContainer {
 
-	Icon textureSides;
-	Icon textureTopOn;
-	Icon textureTopOff;
 	public IFillerPattern currentPattern;
+	private IIcon textureSides;
+	private IIcon textureTopOn;
+	private IIcon textureTopOff;
 
-	public BlockFiller(int i) {
-		super(i, Material.iron);
+	public BlockFiller() {
+		super(Material.iron);
 
 		setHardness(5F);
-		setCreativeTab(CreativeTabBuildCraft.tabBuildCraft);
+		setCreativeTab(CreativeTabBuildCraft.BLOCKS.get());
 	}
 
 	@Override
 	public boolean onBlockActivated(World world, int i, int j, int k, EntityPlayer entityplayer, int par6, float par7, float par8, float par9) {
 
 		// Drop through if the player is sneaking
-		if (entityplayer.isSneaking())
+		if (entityplayer.isSneaking()) {
 			return false;
+		}
 
-		if (!CoreProxy.proxy.isRenderWorld(world)) {
+		if (!world.isRemote) {
 			entityplayer.openGui(BuildCraftBuilders.instance, GuiIds.FILLER, world, i, j, k);
 		}
 		return true;
 
 	}
 
-	@SuppressWarnings({ "all" })
-	public Icon getBlockTexture(IBlockAccess iblockaccess, int i, int j, int k, int l) {
-		int m = iblockaccess.getBlockMetadata(i, j, k);
-
-		if (iblockaccess == null)
-			return getIcon(i, m);
-
-		TileEntity tile = iblockaccess.getBlockTileEntity(i, j, k);
+	@Override
+	public IIcon getIcon(IBlockAccess world, int x, int y, int z, int side) {
+		int m = world.getBlockMetadata(x, y, z);
+		TileEntity tile = world.getTileEntity(x, y, z);
 
 		if (tile != null && tile instanceof TileFiller) {
 			TileFiller filler = (TileFiller) tile;
-			if (l == 1 || l == 0) {
-				if (!filler.isActive())
+			if (side == 1 || side == 0) {
+				if (!filler.isActive()) {
 					return textureTopOff;
-				else
+				} else {
 					return textureTopOn;
-			} else if (filler.currentPattern != null)
-				return filler.currentPattern.getTexture();
-			else
+				}
+			} else if (filler.currentPattern != null) {
+				return filler.currentPattern.getIcon();
+			} else {
 				return textureSides;
+			}
 		}
 
-		return getIcon(l, m);
+		return getIcon(side, m);
 	}
 
 	@Override
-	public Icon getIcon(int i, int j) {
-		if (i == 0 || i == 1)
+	public IIcon getIcon(int i, int j) {
+		if (i == 0 || i == 1) {
 			return textureTopOn;
-		else
+		} else {
 			return textureSides;
+		}
 	}
 
 	@Override
-	public TileEntity createNewTileEntity(World var1) {
+	public TileEntity createNewTileEntity(World world, int metadata) {
 		return new TileFiller();
 	}
 
 	@Override
-	public void breakBlock(World world, int x, int y, int z, int par5, int par6) {
+	public void breakBlock(World world, int x, int y, int z, Block block, int par6) {
 		Utils.preDestroyBlock(world, x, y, z);
-		super.breakBlock(world, x, y, z, par5, par6);
-	}
-
-	@SuppressWarnings({ "unchecked", "rawtypes" })
-	@Override
-	public void addCreativeItems(ArrayList itemList) {
-		itemList.add(new ItemStack(this));
+		super.breakBlock(world, x, y, z, block, par6);
 	}
 
 	@Override
 	@SideOnly(Side.CLIENT)
-	public void registerIcons(IconRegister par1IconRegister) {
+	public void registerBlockIcons(IIconRegister par1IconRegister) {
 	    textureTopOn = par1IconRegister.registerIcon("buildcraft:blockFillerTopOn");
         textureTopOff = par1IconRegister.registerIcon("buildcraft:blockFillerTopOff");
         textureSides = par1IconRegister.registerIcon("buildcraft:blockFillerSides");
+	}
+
+	@Override
+	public boolean renderAsNormalBlock() {
+		return false;
+	}
+
+	@Override
+	public boolean isSideSolid(IBlockAccess world, int x, int y, int z, ForgeDirection side) {
+		return false;
+	}
+
+	@Override
+	public int getLightValue(IBlockAccess world, int x, int y, int z) {
+		return 1;
 	}
 }

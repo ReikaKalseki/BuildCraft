@@ -1,58 +1,93 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.transport;
 
-import buildcraft.BuildCraftCore;
-import buildcraft.api.core.Position;
-import buildcraft.core.proxy.CoreProxy;
-import buildcraft.core.utils.EnumColor;
 import java.util.EnumSet;
+import java.util.Map;
+
+import com.google.common.collect.MapMaker;
+
 import net.minecraft.entity.item.EntityItem;
 import net.minecraft.inventory.IInventory;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.MathHelper;
-import net.minecraftforge.common.ForgeDirection;
+
+import cpw.mods.fml.common.FMLCommonHandler;
+import cpw.mods.fml.relauncher.Side;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.BuildCraftCore;
+import buildcraft.api.core.Position;
+import buildcraft.core.inventory.StackHelper;
+import buildcraft.core.utils.EnumColor;
 
 public class TravelingItem {
 
+	public static final TravelingItemCache serverCache = new TravelingItemCache();
+	public static final TravelingItemCache clientCache = new TravelingItemCache();
 	public static final InsertionHandler DEFAULT_INSERTION_HANDLER = new InsertionHandler();
 	private static int maxId = 0;
-	protected float speed = 0.01F;
-	protected ItemStack item;
-	protected TileEntity container;
+
+	public final EnumSet<ForgeDirection> blacklist = EnumSet.noneOf(ForgeDirection.class);
+
 	public double xCoord, yCoord, zCoord;
 	public final int id;
 	public boolean toCenter = true;
 	public EnumColor color;
 	public ForgeDirection input = ForgeDirection.UNKNOWN;
 	public ForgeDirection output = ForgeDirection.UNKNOWN;
-	public final EnumSet<ForgeDirection> blacklist = EnumSet.noneOf(ForgeDirection.class);
-	private NBTTagCompound extraData;
-	private InsertionHandler insertionHandler = DEFAULT_INSERTION_HANDLER;
+
+	protected float speed = 0.01F;
+
+	protected ItemStack itemStack;
+	protected TileEntity container;
+	protected NBTTagCompound extraData;
+	protected InsertionHandler insertionHandler = DEFAULT_INSERTION_HANDLER;
 
 	/* CONSTRUCTORS */
-	public TravelingItem() {
-		this(maxId < Short.MAX_VALUE ? ++maxId : (maxId = Short.MIN_VALUE));
-	}
-
-	public TravelingItem(int id) {
+	protected TravelingItem(int id) {
 		this.id = id;
 	}
 
-	public TravelingItem(double x, double y, double z, ItemStack stack) {
-		this();
-		this.xCoord = x;
-		this.yCoord = y;
-		this.zCoord = z;
-		this.item = stack.copy();
+	public static TravelingItem make(int id) {
+		TravelingItem item = new TravelingItem(id);
+		getCache().cache(item);
+		return item;
+	}
+
+	public static TravelingItem make() {
+		return make(maxId < Short.MAX_VALUE ? ++maxId : (maxId = Short.MIN_VALUE));
+	}
+
+	public static TravelingItem make(double x, double y, double z, ItemStack stack) {
+		TravelingItem item = make();
+		item.xCoord = x;
+		item.yCoord = y;
+		item.zCoord = z;
+		item.itemStack = stack.copy();
+		return item;
+	}
+
+	public static TravelingItem make(NBTTagCompound nbt) {
+		TravelingItem item = make();
+		item.readFromNBT(nbt);
+		return item;
+	}
+
+	public static TravelingItemCache getCache() {
+		if (FMLCommonHandler.instance().getEffectiveSide() == Side.CLIENT) {
+			return clientCache;
+		}
+		return serverCache;
 	}
 
 	/* GETTING & SETTING */
@@ -77,11 +112,11 @@ public class TravelingItem {
 	}
 
 	public ItemStack getItemStack() {
-		return item;
+		return itemStack;
 	}
 
 	public void setItemStack(ItemStack item) {
-		this.item = item;
+		this.itemStack = item;
 	}
 
 	public TileEntity getContainer() {
@@ -93,8 +128,9 @@ public class TravelingItem {
 	}
 
 	public NBTTagCompound getExtraData() {
-		if (extraData == null)
+		if (extraData == null) {
 			extraData = new NBTTagCompound();
+		}
 		return extraData;
 	}
 
@@ -102,9 +138,18 @@ public class TravelingItem {
 		return extraData != null;
 	}
 
+	@Deprecated
 	public void setInsetionHandler(InsertionHandler handler) {
-		if (handler == null)
+		if (handler == null) {
 			return;
+		}
+		this.insertionHandler = handler;
+	}
+
+	public void setInsertionHandler(InsertionHandler handler) {
+		if (handler == null) {
+			return;
+		}
 		this.insertionHandler = handler;
 	}
 
@@ -131,11 +176,13 @@ public class TravelingItem {
 		output = ForgeDirection.getOrientation(data.getInteger("output"));
 
 		byte c = data.getByte("color");
-		if (c != -1)
+		if (c != -1) {
 			color = EnumColor.fromId(c);
+		}
 
-		if (data.hasKey("extraData"))
+		if (data.hasKey("extraData")) {
 			extraData = data.getCompoundTag("extraData");
+		}
 	}
 
 	public void writeToNBT(NBTTagCompound data) {
@@ -143,9 +190,9 @@ public class TravelingItem {
 		data.setDouble("y", yCoord);
 		data.setDouble("z", zCoord);
 		data.setFloat("speed", getSpeed());
-		NBTTagCompound nbttagcompound2 = new NBTTagCompound();
-		getItemStack().writeToNBT(nbttagcompound2);
-		data.setCompoundTag("Item", nbttagcompound2);
+		NBTTagCompound itemStackTag = new NBTTagCompound();
+		getItemStack().writeToNBT(itemStackTag);
+		data.setTag("Item", itemStackTag);
 
 		data.setBoolean("toCenter", toCenter);
 		data.setInteger("input", input.ordinal());
@@ -153,29 +200,30 @@ public class TravelingItem {
 
 		data.setByte("color", color != null ? (byte) color.ordinal() : -1);
 
-		if (extraData != null)
+		if (extraData != null) {
 			data.setTag("extraData", extraData);
+		}
 	}
 
-	public EntityItem toEntityItem(ForgeDirection dir) {
-		if (container != null && !CoreProxy.proxy.isRenderWorld(container.worldObj)) {
-			if (getItemStack().stackSize <= 0)
+	public EntityItem toEntityItem() {
+		if (container != null && !container.getWorldObj().isRemote) {
+			if (getItemStack().stackSize <= 0) {
 				return null;
+			}
 
-			Position motion = new Position(0, 0, 0, dir);
+			Position motion = new Position(0, 0, 0, output);
 			motion.moveForwards(0.1 + getSpeed() * 2F);
 
-			EntityItem entityitem = new EntityItem(container.worldObj, xCoord, yCoord, zCoord, getItemStack());
+			ItemStack stack = getItemStack();
+			EntityItem entity = new EntityItem(container.getWorldObj(), xCoord, yCoord, zCoord, getItemStack());
+			entity.lifespan = BuildCraftCore.itemLifespan;
+			entity.delayBeforeCanPickup = 10;
 
-			entityitem.lifespan = BuildCraftCore.itemLifespan;
-			entityitem.delayBeforeCanPickup = 10;
-
-			float f3 = 0.00F + container.worldObj.rand.nextFloat() * 0.04F - 0.02F;
-			entityitem.motionX = (float) container.worldObj.rand.nextGaussian() * f3 + motion.x;
-			entityitem.motionY = (float) container.worldObj.rand.nextGaussian() * f3 + motion.y;
-			entityitem.motionZ = (float) container.worldObj.rand.nextGaussian() * f3 + +motion.z;
-			container.worldObj.spawnEntityInWorld(entityitem);
-			return entityitem;
+			float f3 = 0.00F + container.getWorldObj().rand.nextFloat() * 0.04F - 0.02F;
+			entity.motionX = (float) container.getWorldObj().rand.nextGaussian() * f3 + motion.x;
+			entity.motionY = (float) container.getWorldObj().rand.nextGaussian() * f3 + motion.y;
+			entity.motionZ = (float) container.getWorldObj().rand.nextGaussian() * f3 + +motion.z;
+			return entity;
 		}
 		return null;
 	}
@@ -183,18 +231,59 @@ public class TravelingItem {
 	public float getEntityBrightness(float f) {
 		int i = MathHelper.floor_double(xCoord);
 		int j = MathHelper.floor_double(zCoord);
-		if (container != null && container.worldObj.blockExists(i, 128 / 2, j)) {
+		if (container != null && container.getWorldObj().blockExists(i, 128 / 2, j)) {
 			double d = 0.66000000000000003D;
 			int k = MathHelper.floor_double(yCoord + d);
-			return container.worldObj.getLightBrightness(i, k, j);
-		} else
+			return container.getWorldObj().getLightBrightness(i, k, j);
+		} else {
 			return 0.0F;
+		}
 	}
 
 	public boolean isCorrupted() {
-		return getItemStack() == null || getItemStack().stackSize <= 0 || Item.itemsList[getItemStack().itemID] == null;
+		return itemStack == null || itemStack.stackSize <= 0 || itemStack.getItem() == null;
 	}
-	
+
+	public boolean canBeGroupedWith(TravelingItem otherItem) {
+		if (otherItem == this) {
+			return false;
+		}
+		if (toCenter != otherItem.toCenter) {
+			return false;
+		}
+		if (output != otherItem.output) {
+			return false;
+		}
+		if (color != otherItem.color) {
+			return false;
+		}
+		if (hasExtraData() || otherItem.hasExtraData()) {
+			return false;
+		}
+		if (insertionHandler != DEFAULT_INSERTION_HANDLER) {
+			return false;
+		}
+		if (!blacklist.equals(otherItem.blacklist)) {
+			return false;
+		}
+		if (otherItem.isCorrupted()) {
+			return false;
+		}
+		return StackHelper.canStacksMerge(itemStack, otherItem.itemStack);
+	}
+
+	public boolean tryMergeInto(TravelingItem otherItem) {
+		if (!canBeGroupedWith(otherItem)) {
+			return false;
+		}
+		if (StackHelper.mergeStacks(itemStack, otherItem.itemStack, false) == itemStack.stackSize) {
+			StackHelper.mergeStacks(itemStack, otherItem.itemStack, true);
+			itemStack.stackSize = 0;
+			return true;
+		}
+		return false;
+	}
+
 	@Override
 	public int hashCode() {
 		int hash = 7;
@@ -204,20 +293,41 @@ public class TravelingItem {
 
 	@Override
 	public boolean equals(Object obj) {
-		if (obj == null)
+		if (obj == null) {
 			return false;
-		if (getClass() != obj.getClass())
+		}
+		if (getClass() != obj.getClass()) {
 			return false;
+		}
 		final TravelingItem other = (TravelingItem) obj;
-		if (this.id != other.id)
+		if (this.id != other.id) {
 			return false;
+		}
 		return true;
+	}
+
+	@Override
+	public String toString() {
+		return "TravelingItem: " + id;
 	}
 
 	public static class InsertionHandler {
 
 		public boolean canInsertItem(TravelingItem item, IInventory inv) {
 			return true;
+		}
+	}
+
+	public static class TravelingItemCache {
+
+		private final Map<Integer, TravelingItem> itemCache = new MapMaker().weakValues().makeMap();
+
+		public void cache(TravelingItem item) {
+			itemCache.put(item.id, item);
+		}
+
+		public TravelingItem get(int id) {
+			return itemCache.get(id);
 		}
 	}
 }

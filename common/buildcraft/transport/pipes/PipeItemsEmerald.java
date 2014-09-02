@@ -1,78 +1,76 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.transport.pipes;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import io.netty.buffer.ByteBuf;
 
 import net.minecraft.block.Block;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
+import net.minecraft.inventory.ISidedInventory;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraftforge.common.ForgeDirection;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
 import buildcraft.BuildCraftTransport;
-import buildcraft.api.inventory.ISelectiveInventory;
-import buildcraft.api.inventory.ISpecialInventory;
 import buildcraft.core.GuiIds;
-import buildcraft.core.gui.buttons.IButtonTextureSet;
-import buildcraft.core.gui.buttons.IMultiButtonState;
-import buildcraft.core.gui.buttons.MultiButtonController;
-import buildcraft.core.gui.buttons.StandardButtonTextureSets;
-import buildcraft.core.gui.tooltips.ToolTip;
-import buildcraft.core.gui.tooltips.ToolTipLine;
+import buildcraft.core.inventory.InvUtils;
+import buildcraft.core.inventory.InventoryWrapper;
 import buildcraft.core.inventory.SimpleInventory;
+import buildcraft.core.inventory.StackHelper;
 import buildcraft.core.network.IClientState;
 import buildcraft.core.network.IGuiReturnHandler;
-import buildcraft.core.proxy.CoreProxy;
-import buildcraft.core.utils.StringUtils;
 import buildcraft.core.utils.Utils;
 import buildcraft.transport.BlockGenericPipe;
 import buildcraft.transport.PipeIconProvider;
 
 public class PipeItemsEmerald extends PipeItemsWood implements IClientState, IGuiReturnHandler {
 
-	public static enum ButtonState implements IMultiButtonState {
-		BLOCKING("gui.pipes.emerald.blocking"), NONBLOCKING("gui.pipes.emerald.nonblocking");
+	public enum FilterMode {
+		WHITE_LIST, BLACK_LIST, ROUND_ROBIN;
+	}
 
-		private final String label;
-		private final ToolTip tip;
+	public class EmeraldPipeSettings {
 
-		private ButtonState(String label) {
-			this.label = label;
-			tip = new ToolTip();
-			tip.add(new ToolTipLine(label + ".tip"));
+		private FilterMode filterMode;
+
+		public EmeraldPipeSettings() {
+			filterMode = FilterMode.WHITE_LIST;
 		}
 
-		@Override
-		public String getLabel() {
-			return StringUtils.localize(this.label);
+		public FilterMode getFilterMode() {
+			return filterMode;
 		}
 
-		@Override
-		public IButtonTextureSet getTextureSet() {
-			return StandardButtonTextureSets.SMALL_BUTTON;
+		public void setFilterMode(FilterMode mode) {
+			filterMode = mode;
 		}
 
-		@Override
-		public ToolTip getToolTip() {
-			return this.tip;
+		public void readFromNBT(NBTTagCompound nbt) {
+			filterMode = FilterMode.values()[nbt.getByte("filterMode")];
+		}
+
+		public void writeToNBT(NBTTagCompound nbt) {
+			nbt.setByte("filterMode", (byte) filterMode.ordinal());
 		}
 	}
 
-	private final MultiButtonController stateController = MultiButtonController.getController(ButtonState.BLOCKING.ordinal(), ButtonState.values());
+	private EmeraldPipeSettings settings = new EmeraldPipeSettings();
+
 	private final SimpleInventory filters = new SimpleInventory(9, "Filters", 1);
+
 	private int currentFilter = 0;
 
-	public PipeItemsEmerald(int itemID) {
-		super(itemID);
+	public PipeItemsEmerald(Item item) {
+		super(item);
 
 		standardIconIndex = PipeIconProvider.TYPE.PipeItemsEmerald_Standard.ordinal();
 		solidIconIndex = PipeIconProvider.TYPE.PipeAllEmerald_Solid.ordinal();
@@ -80,8 +78,8 @@ public class PipeItemsEmerald extends PipeItemsWood implements IClientState, IGu
 
 	@Override
 	public boolean blockActivated(EntityPlayer entityplayer) {
-		if (entityplayer.getCurrentEquippedItem() != null && entityplayer.getCurrentEquippedItem().itemID < Block.blocksList.length) {
-			if (Block.blocksList[entityplayer.getCurrentEquippedItem().itemID] instanceof BlockGenericPipe) {
+		if (entityplayer.getCurrentEquippedItem() != null) {
+			if (Block.getBlockFromItem(entityplayer.getCurrentEquippedItem().getItem()) instanceof BlockGenericPipe) {
 				return false;
 			}
 		}
@@ -90,90 +88,107 @@ public class PipeItemsEmerald extends PipeItemsWood implements IClientState, IGu
 			return true;
 		}
 
-		if (!CoreProxy.proxy.isRenderWorld(container.worldObj)) {
-			entityplayer.openGui(BuildCraftTransport.instance, GuiIds.PIPE_EMERALD_ITEM, container.worldObj, container.xCoord, container.yCoord, container.zCoord);
+		if (!container.getWorldObj().isRemote) {
+			entityplayer.openGui(BuildCraftTransport.instance, GuiIds.PIPE_EMERALD_ITEM, container.getWorldObj(), container.xCoord, container.yCoord, container.zCoord);
 		}
 
 		return true;
 	}
 
-	/**
-	 * Return the itemstack that can be if something can be extracted from this
-	 * inventory, null if none. On certain cases, the extractable slot depends
-	 * on the position of the pipe.
-	 */
 	@Override
 	public ItemStack[] checkExtract(IInventory inventory, boolean doRemove, ForgeDirection from) {
+		if (inventory == null) {
+			return null;
+		}
 
-		/* ISELECTIVEINVENTORY */
-		// non blocking mode is not implemented for ISelectiveInventory yet
-		if (inventory instanceof ISelectiveInventory) {
-			ItemStack[] stacks = ((ISelectiveInventory) inventory).extractItem(new ItemStack[] { getCurrentFilter() }, false, doRemove, from, (int) powerHandler.getEnergyStored());
+		// Handle possible double chests and wrap it in the ISidedInventory interface.
+		ISidedInventory sidedInventory = InventoryWrapper.getWrappedInventory(InvUtils.getInventory(inventory));
+
+		if (settings.getFilterMode() == FilterMode.ROUND_ROBIN) {
+			return checkExtractRoundRobin(sidedInventory, doRemove, from);
+		}
+
+		return checkExtractFiltered(sidedInventory, doRemove, from);
+	}
+
+	private ItemStack[] checkExtractFiltered(ISidedInventory inventory, boolean doRemove, ForgeDirection from) {
+		for (int k : inventory.getAccessibleSlotsFromSide(from.ordinal())) {
+			ItemStack stack = inventory.getStackInSlot(k);
+
+			if (stack == null || stack.stackSize <= 0) {
+				continue;
+			}
+
+			if (!inventory.canExtractItem(k, stack, from.ordinal())) {
+				continue;
+			}
+
+			boolean matches = isFiltered(stack);
+			boolean isBlackList = settings.getFilterMode() == FilterMode.BLACK_LIST;
+
+			if ((isBlackList && matches) || (!isBlackList && !matches)) {
+				continue;
+			}
+
 			if (doRemove) {
-				for (ItemStack stack : stacks) {
-					if (stack != null) {
-						powerHandler.useEnergy(stack.stackSize, stack.stackSize, true);
-					}
-				}
-				incrementFilter();
+				double energyUsed =  mjStored > stack.stackSize ? stack.stackSize : mjStored;
+				mjStored -= energyUsed;
+
+				stack = inventory.decrStackSize(k, (int) Math.floor(energyUsed));
 			}
-			return stacks;
 
-			/* ISPECIALINVENTORY */
-			// non blocking mode is not needed for ISpecialInventory since its not round robin anyway
-		} else if (inventory instanceof ISpecialInventory) {
-			ItemStack[] stacks = ((ISpecialInventory) inventory).extractItem(false, from, (int) powerHandler.getEnergyStored());
-			if (stacks != null) {
-				for (ItemStack stack : stacks) {
-					if (stack == null)
-						continue;
+			return new ItemStack[] {stack};
+		}
 
-					boolean matches = false;
-					for (int i = 0; i < filters.getSizeInventory(); i++) {
-						ItemStack filter = filters.getStackInSlot(i);
-						if (filter != null && filter.isItemEqual(stack)) {
-							matches = true;
-							break;
-						}
-					}
-					if (!matches) {
-						return null;
-					}
+		return null;
+	}
+
+	private ItemStack[] checkExtractRoundRobin(ISidedInventory inventory, boolean doRemove, ForgeDirection from) {
+		for (int i : inventory.getAccessibleSlotsFromSide(from.ordinal())) {
+			ItemStack stack = inventory.getStackInSlot(i);
+
+			if (stack != null && stack.stackSize > 0) {
+				ItemStack filter = getCurrentFilter();
+
+				if (filter == null) {
+					return null;
 				}
+
+				if (!StackHelper.isMatchingItem(filter, stack, true, false)) {
+					continue;
+				}
+
+				if (!inventory.canExtractItem(i, stack, from.ordinal())) {
+					continue;
+				}
+
 				if (doRemove) {
-					stacks = ((ISpecialInventory) inventory).extractItem(true, from, (int) powerHandler.getEnergyStored());
-					for (ItemStack stack : stacks) {
-						if (stack != null) {
-							powerHandler.useEnergy(stack.stackSize, stack.stackSize, true);
-						}
-					}
-				}
-			}
-			return stacks;
-
-		} else {
-
-			// This is a generic inventory
-			IInventory inv = Utils.getInventory(inventory);
-			ItemStack result = checkExtractGeneric(inv, doRemove, from);
-
-			// check through every filter once if non-blocking
-			if (doRemove && stateController.getButtonState() == ButtonState.NONBLOCKING && result == null) {
-				int count = 1;
-				while (result == null && count < filters.getSizeInventory()) {
+					// In Round Robin mode, extract only 1 item regardless of power level.
+					stack = inventory.decrStackSize(i, 1);
 					incrementFilter();
-					result = checkExtractGeneric(inv, doRemove, from);
-					count++;
 				}
-			}
 
-			if (result != null) {
-				return new ItemStack[] { result };
+				return new ItemStack[]{ stack };
 			}
 		}
 
 		return null;
+	}
 
+	private boolean isFiltered(ItemStack stack) {
+		for (int i = 0; i < filters.getSizeInventory(); i++) {
+			ItemStack filter = filters.getStackInSlot(i);
+
+			if (filter == null) {
+				return false;
+			}
+
+			if (StackHelper.isMatchingItem(filter, stack, true, false)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private void incrementFilter() {
@@ -193,83 +208,54 @@ public class PipeItemsEmerald extends PipeItemsWood implements IClientState, IGu
 		return filters.getStackInSlot(currentFilter % filters.getSizeInventory());
 	}
 
-	@Override
-	public ItemStack checkExtractGeneric(net.minecraft.inventory.ISidedInventory inventory, boolean doRemove, ForgeDirection from) {
-		for (int i : inventory.getAccessibleSlotsFromSide(from.ordinal())) {
-			ItemStack stack = inventory.getStackInSlot(i);
-			if (stack != null && stack.stackSize > 0) {
-				ItemStack filter = getCurrentFilter();
-				if (filter == null) {
-					return null;
-				}
-				if (!filter.isItemEqual(stack)) {
-					continue;
-				}
-				if (!inventory.canExtractItem(i, stack, from.ordinal())) {
-					continue;
-				}
-				if (doRemove) {
-					incrementFilter();
-					return inventory.decrStackSize(i, (int) powerHandler.useEnergy(1, stack.stackSize, true));
-				} else {
-					return stack;
-				}
-			}
-		}
-
-		return null;
+	public IInventory getFilters() {
+		return filters;
 	}
 
-	/* SAVING & LOADING */
+	public EmeraldPipeSettings getSettings() {
+		return settings;
+	}
+
+	@Override
+	public void writeData(ByteBuf data) {
+		NBTTagCompound nbt = new NBTTagCompound();
+		writeToNBT(nbt);
+		Utils.writeNBT(data, nbt);
+	}
+
+	@Override
+	public void readData(ByteBuf data) {
+		NBTTagCompound nbt = Utils.readNBT(data);
+		readFromNBT(nbt);
+	}
+
 	@Override
 	public void readFromNBT(NBTTagCompound nbt) {
 		super.readFromNBT(nbt);
-		filters.readFromNBT(nbt);
-		currentFilter = nbt.getInteger("currentFilter");
 
-		stateController.readFromNBT(nbt, "state");
+		filters.readFromNBT(nbt);
+		settings.readFromNBT(nbt);
+
+		currentFilter = nbt.getInteger("currentFilter");
 	}
 
 	@Override
 	public void writeToNBT(NBTTagCompound nbt) {
 		super.writeToNBT(nbt);
+
 		filters.writeToNBT(nbt);
+		settings.writeToNBT(nbt);
+
 		nbt.setInteger("currentFilter", currentFilter);
-
-		stateController.writeToNBT(nbt, "state");
-	}
-
-	// ICLIENTSTATE
-	@Override
-	public void writeData(DataOutputStream data) throws IOException {
-		NBTTagCompound nbt = new NBTTagCompound();
-		writeToNBT(nbt);
-		NBTBase.writeNamedTag(nbt, data);
 	}
 
 	@Override
-	public void readData(DataInputStream data) throws IOException {
-		NBTBase nbt = NBTBase.readNamedTag(data);
-		if (nbt instanceof NBTTagCompound) {
-			readFromNBT((NBTTagCompound) nbt);
-		}
-	}
-
-	public IInventory getFilters() {
-		return filters;
-	}
-
-	public MultiButtonController getStateController() {
-		return stateController;
+	public void writeGuiData(ByteBuf data) {
+		data.writeByte((byte) settings.getFilterMode().ordinal());
 	}
 
 	@Override
-	public void writeGuiData(DataOutputStream data) throws IOException {
-		data.writeByte(stateController.getCurrentState());
-	}
-
-	@Override
-	public void readGuiData(DataInputStream data, EntityPlayer sender) throws IOException {
-		stateController.setCurrentState(data.readByte());
+	public void readGuiData(ByteBuf data, EntityPlayer sender) {
+		settings.setFilterMode(FilterMode.values()[data.readByte()]);
 	}
 }

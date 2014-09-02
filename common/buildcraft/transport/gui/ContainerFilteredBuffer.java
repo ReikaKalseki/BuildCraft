@@ -1,25 +1,23 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.transport.gui;
 
-import buildcraft.core.gui.BuildCraftContainer;
-import buildcraft.core.gui.slots.SlotPhantom;
-import buildcraft.core.gui.slots.SlotValidated;
-import buildcraft.transport.TileFilteredBuffer;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.inventory.Slot;
 
-/**
- *
- * @author SandGrainOne
- */
+import buildcraft.core.gui.BuildCraftContainer;
+import buildcraft.core.gui.slots.SlotPhantom;
+import buildcraft.core.gui.slots.SlotValidated;
+import buildcraft.transport.TileFilteredBuffer;
+
 public class ContainerFilteredBuffer extends BuildCraftContainer {
 
 	private class SlotPhantomLockable extends SlotPhantom {

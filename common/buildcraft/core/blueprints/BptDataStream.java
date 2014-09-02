@@ -1,12 +1,11 @@
 /**
- * Copyright (c) SpaceToad, 2011-2012
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
  * http://www.mod-buildcraft.com
  *
  * BuildCraft is distributed under the terms of the Minecraft Mod Public
  * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
-
 package buildcraft.core.blueprints;
 
 import java.io.DataInput;
@@ -17,8 +16,9 @@ import java.io.Writer;
 
 public class BptDataStream implements DataInput, DataOutput {
 
-	Writer writer;
-	Reader reader;
+	public boolean isFirst = true;
+	private Writer writer;
+	private Reader reader;
 
 	public BptDataStream(Writer writer) {
 		this.writer = writer;
@@ -27,8 +27,6 @@ public class BptDataStream implements DataInput, DataOutput {
 	public BptDataStream(Reader reader) {
 		this.reader = reader;
 	}
-
-	public boolean isFirst = true;
 
 	@Override
 	public void readFully(byte[] b) throws IOException {
@@ -160,8 +158,9 @@ public class BptDataStream implements DataInput, DataOutput {
 
 		char c = (char) reader.read();
 
-		if (c != '\"')
+		if (c != '\"') {
 			throw new IOException("String does not start with '\"' character");
+		}
 
 		while (reader.ready() && !exit) {
 			c = (char) reader.read();
@@ -173,13 +172,19 @@ public class BptDataStream implements DataInput, DataOutput {
 				switch (c) {
 				case 'n':
 					builder.append('\n');
+					break;
 				case 'r':
 					builder.append('\r');
+					break;
 				case '\\':
 					builder.append('\\');
+					break;
 				case '\"':
 					builder.append('\"');
+					break;
 				}
+
+				break;
 			case '"':
 				exit = true;
 				break;
@@ -191,10 +196,11 @@ public class BptDataStream implements DataInput, DataOutput {
 		int i = reader.read();
 		c = (char) i;
 
-		if (c != ',' && i > 0)
+		if (c != ',' && i > 0) {
 			throw new IOException("Missing ',' at end of attribute");
-
-		return builder.toString();
+		} else {
+			return builder.toString();
+		}
 	}
 
 	@Override
@@ -284,14 +290,19 @@ public class BptDataStream implements DataInput, DataOutput {
 			switch (c) {
 			case '\n':
 				writer.write("\\n");
+				break;
 			case '\r':
 				writer.write("\\r");
+				break;
 			case '\"':
 				writer.write("\\\"");
+				break;
 			case '\\':
 				writer.write("\\\\");
+				break;
 			default:
 				writer.write(c);
+				break;
 			}
 		}
 

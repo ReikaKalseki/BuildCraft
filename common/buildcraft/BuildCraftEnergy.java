@@ -1,147 +1,186 @@
 /**
- * BuildCraft is open-source. It is distributed under the terms of the
- * BuildCraft Open Source License. It grants rights to read, modify, compile or
- * run the code. It does *NOT* grant the right to redistribute this software or
- * its modifications in any form, binary or source, except if expressively
- * granted by the copyright holder.
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
+ *
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
+ * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft;
 
-import buildcraft.api.fuels.IronEngineCoolant;
-import buildcraft.api.fuels.IronEngineFuel;
-import buildcraft.api.recipes.RefineryRecipes;
-import buildcraft.core.BlockIndex;
-import buildcraft.core.BlockSpring;
-import buildcraft.core.DefaultProps;
-import buildcraft.core.InterModComms;
-import buildcraft.core.Version;
-import buildcraft.core.network.PacketHandler;
-import buildcraft.core.proxy.CoreProxy;
-import buildcraft.core.triggers.BCTrigger;
-import buildcraft.energy.BlockBuildcraftFluid;
-import buildcraft.energy.BlockEngine;
-import buildcraft.energy.BptBlockEngine;
-import buildcraft.energy.EnergyProxy;
-import buildcraft.energy.GuiHandler;
-import buildcraft.energy.ItemBucketBuildcraft;
-import buildcraft.energy.ItemEngine;
-import buildcraft.energy.BucketHandler;
-import buildcraft.energy.TileEngine.EnergyStage;
-import buildcraft.energy.TriggerEngineHeat;
-import buildcraft.energy.worldgen.BiomeGenOilDesert;
-import buildcraft.energy.worldgen.BiomeGenOilOcean;
-import buildcraft.energy.worldgen.BiomeInitializer;
-import buildcraft.energy.worldgen.OilPopulate;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.logging.Level;
+
+import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
+import net.minecraft.init.Blocks;
+import net.minecraft.init.Items;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.world.biome.BiomeGenBase;
+
 import cpw.mods.fml.common.Mod;
-import cpw.mods.fml.common.Mod.EventHandler;
-import cpw.mods.fml.common.Mod.Instance;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLInterModComms;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
-import cpw.mods.fml.common.network.NetworkMod;
+import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.network.NetworkRegistry;
-import cpw.mods.fml.common.registry.LanguageRegistry;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
-import java.util.TreeMap;
-import net.minecraft.block.Block;
-import net.minecraft.block.material.Material;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.world.biome.BiomeGenBase;
+
 import net.minecraftforge.client.event.TextureStitchEvent;
-import net.minecraftforge.common.Configuration;
+import net.minecraftforge.common.BiomeDictionary;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.common.Property;
-import net.minecraftforge.event.ForgeSubscribe;
+import net.minecraftforge.common.config.Configuration;
+import net.minecraftforge.common.config.Property;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidContainerRegistry;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
 
-@Mod(name = "BuildCraft Energy", version = Version.VERSION, useMetadata = false, modid = "BuildCraft|Energy", dependencies = DefaultProps.DEPENDENCY_CORE)
-@NetworkMod(channels = {DefaultProps.NET_CHANNEL_NAME}, packetHandler = PacketHandler.class, clientSideRequired = true, serverSideRequired = true)
-public class BuildCraftEnergy {
+import buildcraft.api.blueprints.SchematicRegistry;
+import buildcraft.api.core.BCLog;
+import buildcraft.api.core.JavaTools;
+import buildcraft.api.fuels.IronEngineCoolant;
+import buildcraft.api.fuels.IronEngineFuel;
+import buildcraft.api.recipes.BuildcraftRecipes;
+import buildcraft.core.BlockIndex;
+import buildcraft.core.BlockSpring;
+import buildcraft.core.DefaultProps;
+import buildcraft.core.InterModComms;
+import buildcraft.core.Version;
+import buildcraft.core.network.BuildCraftChannelHandler;
+import buildcraft.core.proxy.CoreProxy;
+import buildcraft.core.triggers.BCTrigger;
+import buildcraft.energy.BlockBuildcraftFluid;
+import buildcraft.energy.BlockEnergyConverter;
+import buildcraft.energy.BlockEnergyEmitter;
+import buildcraft.energy.BlockEnergyReceiver;
+import buildcraft.energy.BlockEngine;
+import buildcraft.energy.BucketHandler;
+import buildcraft.energy.EnergyProxy;
+import buildcraft.energy.GuiHandler;
+import buildcraft.energy.ItemBucketBuildcraft;
+import buildcraft.energy.ItemEnergyConverter;
+import buildcraft.energy.ItemEngine;
+import buildcraft.energy.SchematicEngine;
+import buildcraft.energy.TileEnergyConverter;
+import buildcraft.energy.TileEnergyEmitter;
+import buildcraft.energy.TileEnergyReceiver;
+import buildcraft.energy.TileEngine;
+import buildcraft.energy.TileEngine.EnergyStage;
+import buildcraft.energy.triggers.TriggerEngineHeat;
+import buildcraft.energy.worldgen.BiomeGenOilDesert;
+import buildcraft.energy.worldgen.BiomeGenOilOcean;
+import buildcraft.energy.worldgen.BiomeInitializer;
+import buildcraft.energy.worldgen.OilPopulate;
+import buildcraft.transport.network.PacketHandlerTransport;
 
-	public final static int ENERGY_REMOVE_BLOCK = 25;
-	public final static int ENERGY_EXTRACT_ITEM = 2;
+@Mod(name = "BuildCraft Energy", version = Version.VERSION, useMetadata = false, modid = "BuildCraft|Energy", dependencies = DefaultProps.DEPENDENCY_CORE)
+public class BuildCraftEnergy extends BuildCraftMod {
+
+	public static final int ENERGY_REMOVE_BLOCK = 25;
+	public static final int ENERGY_EXTRACT_ITEM = 2;
 	public static boolean spawnOilSprings = true;
 	public static BiomeGenOilDesert biomeOilDesert;
 	public static BiomeGenOilOcean biomeOilOcean;
 	public static BlockEngine engineBlock;
-	private static Fluid buildcraftFluidOil;
-	private static Fluid buildcraftFluidFuel;
+	public static BlockEnergyEmitter emitterBlock;
+	public static BlockEnergyReceiver receiverBlock;
 	public static Fluid fluidOil;
 	public static Fluid fluidFuel;
+	public static Fluid fluidRedPlasma;
 	public static Block blockOil;
 	public static Block blockFuel;
+	public static Block blockRedPlasma;
+	public static Block blockEnergyConverter;
 	public static Item bucketOil;
 	public static Item bucketFuel;
+	public static Item bucketRedPlasma;
 	public static Item fuel;
 	public static boolean canOilBurn;
-	public static double oilWellScalar;
+	public static double oilWellScalar = 1.0;
+	public static Set<Integer> oilBiomeIDs = new HashSet<Integer>();
+	public static Set<Integer> excessiveOilBiomeIDs = new HashSet<Integer>();
+	public static Set<Integer> excludeOilBiomeIDs = new HashSet<Integer>();
 	public static TreeMap<BlockIndex, Integer> saturationStored = new TreeMap<BlockIndex, Integer>();
-	public static BCTrigger triggerBlueEngineHeat = new TriggerEngineHeat(DefaultProps.TRIGGER_BLUE_ENGINE_HEAT, EnergyStage.BLUE, "buildcraft.engine.stage.blue");
-	public static BCTrigger triggerGreenEngineHeat = new TriggerEngineHeat(DefaultProps.TRIGGER_GREEN_ENGINE_HEAT, EnergyStage.GREEN, "buildcraft.engine.stage.green");
-	public static BCTrigger triggerYellowEngineHeat = new TriggerEngineHeat(DefaultProps.TRIGGER_YELLOW_ENGINE_HEAT, EnergyStage.YELLOW, "buildcraft.engine.stage.yellow");
-	public static BCTrigger triggerRedEngineHeat = new TriggerEngineHeat(DefaultProps.TRIGGER_RED_ENGINE_HEAT, EnergyStage.RED, "buildcraft.engine.stage.red");
-	@Instance("BuildCraft|Energy")
+	public static BCTrigger triggerBlueEngineHeat = new TriggerEngineHeat(EnergyStage.BLUE);
+	public static BCTrigger triggerGreenEngineHeat = new TriggerEngineHeat(EnergyStage.GREEN);
+	public static BCTrigger triggerYellowEngineHeat = new TriggerEngineHeat(EnergyStage.YELLOW);
+	public static BCTrigger triggerRedEngineHeat = new TriggerEngineHeat(EnergyStage.RED);
+	@Mod.Instance("BuildCraft|Energy")
 	public static BuildCraftEnergy instance;
 
-	@EventHandler
+	private static Fluid buildcraftFluidOil;
+	private static Fluid buildcraftFluidFuel;
+	private static Fluid buildcraftFluidRedPlasma;
+
+
+	@Mod.EventHandler
 	public void preInit(FMLPreInitializationEvent evt) {
-		Property engineId = BuildCraftCore.mainConfiguration.getBlock("engine.id", DefaultProps.ENGINE_ID);
+		SchematicRegistry.declareBlueprintSupport("BuildCraft|Energy");
 
-		// Update oil tag
-		int defaultOilId = DefaultProps.OIL_ID;
-		if (BuildCraftCore.mainConfiguration.hasKey(Configuration.CATEGORY_BLOCK, "oilStill.id")) {
-			defaultOilId = BuildCraftCore.mainConfiguration.get(Configuration.CATEGORY_BLOCK, "oilStill.id", defaultOilId).getInt(defaultOilId);
-			BuildCraftCore.mainConfiguration.getCategory(Configuration.CATEGORY_BLOCK).remove("oilStill.id");
-		}
-		int blockOilId = BuildCraftCore.mainConfiguration.getBlock("oil.id", defaultOilId).getInt(defaultOilId);
-
-		int blockFuelId = BuildCraftCore.mainConfiguration.getBlock("fuel.id", DefaultProps.FUEL_ID).getInt(DefaultProps.FUEL_ID);
-		int bucketOilId = BuildCraftCore.mainConfiguration.getItem("bucketOil.id", DefaultProps.BUCKET_OIL_ID).getInt(DefaultProps.BUCKET_OIL_ID);
-		int bucketFuelId = BuildCraftCore.mainConfiguration.getItem("bucketFuel.id", DefaultProps.BUCKET_FUEL_ID).getInt(DefaultProps.BUCKET_FUEL_ID);
-		int oilDesertBiomeId = BuildCraftCore.mainConfiguration.get("biomes", "oilDesert", DefaultProps.BIOME_OIL_DESERT).getInt(DefaultProps.BIOME_OIL_DESERT);
-		int oilOceanBiomeId = BuildCraftCore.mainConfiguration.get("biomes", "oilOcean", DefaultProps.BIOME_OIL_OCEAN).getInt(DefaultProps.BIOME_OIL_OCEAN);
+		int oilDesertBiomeId = BuildCraftCore.mainConfiguration.get("biomes", "biomeOilDesert", DefaultProps.BIOME_OIL_DESERT).getInt(DefaultProps.BIOME_OIL_DESERT);
+		int oilOceanBiomeId = BuildCraftCore.mainConfiguration.get("biomes", "biomeOilOcean", DefaultProps.BIOME_OIL_OCEAN).getInt(DefaultProps.BIOME_OIL_OCEAN);
 		canOilBurn = BuildCraftCore.mainConfiguration.get(Configuration.CATEGORY_GENERAL, "burnOil", true, "Can oil burn?").getBoolean(true);
 		oilWellScalar = BuildCraftCore.mainConfiguration.get(Configuration.CATEGORY_GENERAL, "oilWellGenerationRate", 1.0, "Probability of oil well generation").getDouble(1.0);
+
+		setBiomeList(
+				oilBiomeIDs,
+				BuildCraftCore.mainConfiguration
+						.get(Configuration.CATEGORY_GENERAL, "oil.increasedBiomeIDs",
+								new String[] {BiomeDictionary.Type.SANDY.toString(), BiomeGenBase.taiga.biomeName},
+								"IDs or Biome Types (e.g. SANDY,OCEAN) of biomes that should have increased oil generation rates."));
+
+		setBiomeList(
+				excessiveOilBiomeIDs,
+				BuildCraftCore.mainConfiguration
+				.get(Configuration.CATEGORY_GENERAL,
+								"oil.excessiveBiomeIDs",
+								new String[] {},
+								"IDs or Biome Types (e.g. SANDY,OCEAN) of biomes that should have GREATLY increased oil generation rates."));
+
+		setBiomeList(excludeOilBiomeIDs, BuildCraftCore.mainConfiguration
+				.get(Configuration.CATEGORY_GENERAL, "oil.excludeBiomeIDs",
+						new String[] {BiomeGenBase.sky.biomeName, BiomeGenBase.hell.biomeName},
+						"IDs or Biome Types (e.g. SANDY,OCEAN) of biomes that are excluded from generating oil."));
 
 		double fuelOilMultiplier = BuildCraftCore.mainConfiguration.get(Configuration.CATEGORY_GENERAL, "fuel.oil.combustion", 1.0F, "adjust energy value of Oil in Combustion Engines").getDouble(1.0F);
 		double fuelFuelMultiplier = BuildCraftCore.mainConfiguration.get(Configuration.CATEGORY_GENERAL, "fuel.fuel.combustion", 1.0F, "adjust energy value of Fuel in Combustion Engines").getDouble(1.0F);
 		BuildCraftCore.mainConfiguration.save();
 
-		class BiomeIdException extends RuntimeException {
-
-			public BiomeIdException(String biome, int id) {
-				super(String.format("You have a Biome Id conflict at %d for %s", id, biome));
-			}
-		}
-
 		if (oilDesertBiomeId > 0) {
-			if (BiomeGenBase.biomeList[oilDesertBiomeId] != null) {
-				throw new BiomeIdException("oilDesert", oilDesertBiomeId);
+			if (BiomeGenBase.getBiomeGenArray()[oilDesertBiomeId] != null) {
+				oilDesertBiomeId = findUnusedBiomeID("oilDesert");
+				// save changes to config file
+				BuildCraftCore.mainConfiguration.get("biomes", "biomeOilDesert", oilDesertBiomeId).set(oilDesertBiomeId);
+				BuildCraftCore.mainConfiguration.save();
 			}
 			biomeOilDesert = BiomeGenOilDesert.makeBiome(oilDesertBiomeId);
 		}
 
 		if (oilOceanBiomeId > 0) {
-			if (BiomeGenBase.biomeList[oilOceanBiomeId] != null) {
-				throw new BiomeIdException("oilOcean", oilOceanBiomeId);
+			if (BiomeGenBase.getBiomeGenArray()[oilOceanBiomeId] != null) {
+				oilOceanBiomeId = findUnusedBiomeID("oilOcean");
+				// save changes to config file
+				BuildCraftCore.mainConfiguration.get("biomes", "biomeOilOcean", oilOceanBiomeId).set(oilOceanBiomeId);
+				BuildCraftCore.mainConfiguration.save();
 			}
 			biomeOilOcean = BiomeGenOilOcean.makeBiome(oilOceanBiomeId);
 		}
 
-
-		engineBlock = new BlockEngine(engineId.getInt(DefaultProps.ENGINE_ID));
+		engineBlock = new BlockEngine();
 		CoreProxy.proxy.registerBlock(engineBlock, ItemEngine.class);
 
-		LanguageRegistry.addName(new ItemStack(engineBlock, 1, 0), "Redstone Engine");
-		LanguageRegistry.addName(new ItemStack(engineBlock, 1, 1), "Steam Engine");
-		LanguageRegistry.addName(new ItemStack(engineBlock, 1, 2), "Combustion Engine");
-
+		if (BuildCraftCore.mainConfiguration.get(Configuration.CATEGORY_GENERAL, "energyConverter", true,
+				"Set true for enable energy converter").getBoolean(true)) {
+			blockEnergyConverter = new BlockEnergyConverter();
+			CoreProxy.proxy.registerBlock(blockEnergyConverter, ItemEnergyConverter.class);
+			CoreProxy.proxy.registerTileEntity(TileEnergyConverter.class, "EnergyConverter");
+		}
 
 		// Oil and fuel
 		buildcraftFluidOil = new Fluid("oil").setDensity(800).setViscosity(1500);
@@ -152,58 +191,74 @@ public class BuildCraftEnergy {
 		FluidRegistry.registerFluid(buildcraftFluidFuel);
 		fluidFuel = FluidRegistry.getFluid("fuel");
 
-		if (fluidOil.getBlockID() == -1) {
-			if (blockOilId > 0) {
-				blockOil = new BlockBuildcraftFluid(blockOilId, fluidOil, Material.water).setFlammable(canOilBurn).setFlammability(0);
-				blockOil.setUnlocalizedName("blockOil");
-				CoreProxy.proxy.addName(blockOil, "Oil");
-				CoreProxy.proxy.registerBlock(blockOil);
-				fluidOil.setBlockID(blockOil);
-			}
+		buildcraftFluidRedPlasma = new Fluid("redplasma").setDensity(10000).setViscosity(10000).setLuminosity(30);
+		FluidRegistry.registerFluid(buildcraftFluidRedPlasma);
+		fluidRedPlasma = FluidRegistry.getFluid("redplasma");
+
+		if (fluidOil.getBlock() == null) {
+			blockOil = new BlockBuildcraftFluid(fluidOil, Material.water).setFlammable(canOilBurn).setFlammability(0);
+			blockOil.setBlockName("blockOil");
+			CoreProxy.proxy.registerBlock(blockOil);
+			fluidOil.setBlock(blockOil);
 		} else {
-			blockOil = Block.blocksList[fluidOil.getBlockID()];
+			blockOil = fluidOil.getBlock();
 		}
 
 		if (blockOil != null) {
-			Property oilSpringsProp = BuildCraftCore.mainConfiguration.get(Configuration.CATEGORY_GENERAL, "oilSprings", true);
-			spawnOilSprings = oilSpringsProp.getBoolean(true);
+			spawnOilSprings = BuildCraftCore.mainConfiguration.get("worldgen", "oilSprings", true).getBoolean(true);
 			BlockSpring.EnumSpring.OIL.canGen = spawnOilSprings;
 			BlockSpring.EnumSpring.OIL.liquidBlock = blockOil;
 		}
 
-		if (fluidFuel.getBlockID() == -1) {
-			if (blockFuelId > 0) {
-				blockFuel = new BlockBuildcraftFluid(blockFuelId, fluidFuel, Material.water).setFlammable(true).setFlammability(5).setParticleColor(0.7F, 0.7F, 0.0F);
-				blockFuel.setUnlocalizedName("blockFuel");
-				CoreProxy.proxy.addName(blockFuel, "Fuel");
-				CoreProxy.proxy.registerBlock(blockFuel);
-				fluidFuel.setBlockID(blockFuel);
-			}
+		if (fluidFuel.getBlock() == null) {
+			blockFuel = new BlockBuildcraftFluid(fluidFuel, Material.water).setFlammable(true).setFlammability(5).setParticleColor(0.7F, 0.7F, 0.0F);
+			blockFuel.setBlockName("blockFuel");
+			CoreProxy.proxy.registerBlock(blockFuel);
+			fluidFuel.setBlock(blockFuel);
 		} else {
-			blockFuel = Block.blocksList[fluidFuel.getBlockID()];
+			blockFuel = fluidFuel.getBlock();
+		}
+
+		if (fluidRedPlasma.getBlock() == null) {
+			blockRedPlasma = new BlockBuildcraftFluid(fluidRedPlasma, Material.water).setFlammable(false).setParticleColor(0.9F, 0, 0);
+			blockRedPlasma.setBlockName("blockRedPlasma");
+			CoreProxy.proxy.registerBlock(blockRedPlasma);
+			fluidRedPlasma.setBlock(blockRedPlasma);
+		} else {
+			blockRedPlasma = fluidRedPlasma.getBlock();
 		}
 
 		// Buckets
 
-		if (blockOil != null && bucketOilId > 0) {
-			bucketOil = new ItemBucketBuildcraft(bucketOilId, blockOil.blockID);
-			bucketOil.setUnlocalizedName("bucketOil").setContainerItem(Item.bucketEmpty);
-			LanguageRegistry.addName(bucketOil, "Oil Bucket");
-			FluidContainerRegistry.registerFluidContainer(FluidRegistry.getFluidStack("oil", FluidContainerRegistry.BUCKET_VOLUME), new ItemStack(bucketOil), new ItemStack(Item.bucketEmpty));
+		if (blockOil != null) {
+			bucketOil = new ItemBucketBuildcraft(blockOil);
+			bucketOil.setUnlocalizedName("bucketOil").setContainerItem(Items.bucket);
+			CoreProxy.proxy.registerItem(bucketOil);
+			FluidContainerRegistry.registerFluidContainer(FluidRegistry.getFluidStack("oil", FluidContainerRegistry.BUCKET_VOLUME), new ItemStack(bucketOil), new ItemStack(Items.bucket));
 		}
 
-		if (blockFuel != null && bucketFuelId > 0) {
-			bucketFuel = new ItemBucketBuildcraft(bucketFuelId, blockFuel.blockID);
-			bucketFuel.setUnlocalizedName("bucketFuel").setContainerItem(Item.bucketEmpty);
-			LanguageRegistry.addName(bucketFuel, "Fuel Bucket");
-			FluidContainerRegistry.registerFluidContainer(FluidRegistry.getFluidStack("fuel", FluidContainerRegistry.BUCKET_VOLUME), new ItemStack(bucketFuel), new ItemStack(Item.bucketEmpty));
+		if (blockFuel != null) {
+			bucketFuel = new ItemBucketBuildcraft(blockFuel);
+			bucketFuel.setUnlocalizedName("bucketFuel").setContainerItem(Items.bucket);
+			CoreProxy.proxy.registerItem(bucketFuel);
+			FluidContainerRegistry.registerFluidContainer(FluidRegistry.getFluidStack("fuel", FluidContainerRegistry.BUCKET_VOLUME), new ItemStack(bucketFuel), new ItemStack(Items.bucket));
 		}
 
+		if (!BuildCraftCore.NEXTGEN_PREALPHA) {
+			if (blockRedPlasma != null) {
+				bucketRedPlasma = new ItemBucketBuildcraft(blockRedPlasma);
+				bucketRedPlasma.setUnlocalizedName("bucketRedPlasma").setContainerItem(Items.bucket);
+				CoreProxy.proxy.registerItem(bucketRedPlasma);
+				FluidContainerRegistry.registerFluidContainer(FluidRegistry.getFluidStack("redplasma", FluidContainerRegistry.BUCKET_VOLUME), new ItemStack(bucketRedPlasma), new ItemStack(Items.bucket));
+			}
+		}
+
+		// BucketHandler ensures empty buckets fill with the correct liquid.
 		BucketHandler.INSTANCE.buckets.put(blockOil, bucketOil);
 		BucketHandler.INSTANCE.buckets.put(blockFuel, bucketFuel);
 		MinecraftForge.EVENT_BUS.register(BucketHandler.INSTANCE);
 
-		RefineryRecipes.addRecipe(new FluidStack(fluidOil, 1), new FluidStack(fluidFuel, 1), 12, 1);
+		BuildcraftRecipes.refinery.addRecipe(new FluidStack(fluidOil, 1), new FluidStack(fluidFuel, 1), 12, 1);
 
 		// Iron Engine Fuels
 //		IronEngineFuel.addFuel("lava", 1, 20000);
@@ -212,16 +267,73 @@ public class BuildCraftEnergy {
 
 		// Iron Engine Coolants
 		IronEngineCoolant.addCoolant(FluidRegistry.getFluid("water"), 0.0023F);
-		IronEngineCoolant.addCoolant(Block.ice.blockID, 0, FluidRegistry.getFluidStack("water", FluidContainerRegistry.BUCKET_VOLUME * 2));
+		IronEngineCoolant.addCoolant(Blocks.ice, 0, FluidRegistry.getFluidStack("water", FluidContainerRegistry.BUCKET_VOLUME * 2));
+
+		// Receiver / emitter
+
+		if (!BuildCraftCore.NEXTGEN_PREALPHA) {
+			emitterBlock = new BlockEnergyEmitter();
+			CoreProxy.proxy.registerBlock(emitterBlock.setBlockName("energyEmitterBlock"));
+			CoreProxy.proxy.registerTileEntity(TileEnergyEmitter.class, "net.minecraft.src.builders.TileEnergyEmitter");
+
+			receiverBlock = new BlockEnergyReceiver();
+			CoreProxy.proxy.registerBlock(receiverBlock.setBlockName("energyReceiverBlock"));
+			CoreProxy.proxy.registerTileEntity(TileEnergyReceiver.class, "net.minecraft.src.builders.TileEnergyReceiver");
+		}
 
 		MinecraftForge.EVENT_BUS.register(this);
 	}
 
-	@EventHandler
-	public void init(FMLInitializationEvent evt) {
-		NetworkRegistry.instance().registerGuiHandler(instance, new GuiHandler());
+	private void setBiomeList(Set<Integer> list, Property configuration) {
+		for (String id : configuration.getStringList()) {
+			String strippedId = JavaTools.stripSurroundingQuotes(id.trim());
 
-		new BptBlockEngine(engineBlock.blockID);
+			if (strippedId.length() > 0) {
+				if (strippedId.matches("-?\\d+(\\.\\d+)?")) {
+					try {
+						list.add(Integer.parseInt(strippedId));
+					} catch (NumberFormatException ex) {
+						BCLog.logger.log
+								(Level.WARNING,
+										configuration.getName() + ": Could not find biome id: "
+								+ strippedId + " ; Skipping!");
+					}
+				} else {
+					boolean found = false;
+					String biomeName = strippedId.toUpperCase();
+
+					for (BiomeDictionary.Type t : BiomeDictionary.Type.values()) {
+						String biomeType = t.name().toUpperCase();
+
+						for (BiomeGenBase b : BiomeDictionary.getBiomesForType(t)) {
+							if (b.biomeName.toUpperCase().equals(biomeName)
+									|| biomeType.toUpperCase().equals(biomeName)) {
+								list.add(b.biomeID);
+								found = true;
+							}
+						}
+					}
+
+
+					if (!found) {
+						BCLog.logger.log
+								(Level.WARNING,
+									 configuration.getName() + ": Could not find biome id: "
+								+ strippedId + " ; Skipping!");
+					}
+				}
+			}
+		}
+	}
+
+	@Mod.EventHandler
+	public void init(FMLInitializationEvent evt) {
+		channels = NetworkRegistry.INSTANCE.newChannel
+				(DefaultProps.NET_CHANNEL_NAME + "-ENERGY", new BuildCraftChannelHandler(),  new PacketHandlerTransport());
+
+		NetworkRegistry.INSTANCE.registerGuiHandler(instance, new GuiHandler());
+
+		SchematicRegistry.registerSchematicBlock(engineBlock, SchematicEngine.class);
 
 		if (BuildCraftCore.loadDefaultRecipes) {
 			loadRecipes();
@@ -230,7 +342,7 @@ public class BuildCraftEnergy {
 		EnergyProxy.proxy.registerTileEntities();
 	}
 
-	@EventHandler
+	@Mod.EventHandler
 	public void postInit(FMLPostInitializationEvent evt) {
 		if (BuildCraftCore.modifyWorld) {
 			MinecraftForge.EVENT_BUS.register(OilPopulate.INSTANCE);
@@ -238,127 +350,59 @@ public class BuildCraftEnergy {
 		}
 	}
 
-	@ForgeSubscribe
+	@SubscribeEvent
 	@SideOnly(Side.CLIENT)
 	public void textureHook(TextureStitchEvent.Post event) {
-		if (event.map.textureType == 0) {
+		if (event.map.getTextureType() == 0) {
 			buildcraftFluidOil.setIcons(blockOil.getBlockTextureFromSide(1), blockOil.getBlockTextureFromSide(2));
 			buildcraftFluidFuel.setIcons(blockFuel.getBlockTextureFromSide(1), blockFuel.getBlockTextureFromSide(2));
+			buildcraftFluidRedPlasma.setIcons(blockRedPlasma.getBlockTextureFromSide(1), blockRedPlasma.getBlockTextureFromSide(2));
 		}
 	}
 
 	public static void loadRecipes() {
 		CoreProxy.proxy.addCraftingRecipe(new ItemStack(engineBlock, 1, 0),
-				new Object[]{"www", " g ", "GpG", 'w', "plankWood", 'g', Block.glass, 'G',
-			BuildCraftCore.woodenGearItem, 'p', Block.pistonBase});
-		CoreProxy.proxy.addCraftingRecipe(new ItemStack(engineBlock, 1, 1), new Object[]{"www", " g ", "GpG", 'w', "cobblestone",
-			'g', Block.glass, 'G', BuildCraftCore.stoneGearItem, 'p', Block.pistonBase});
-		CoreProxy.proxy.addCraftingRecipe(new ItemStack(engineBlock, 1, 2), new Object[]{"www", " g ", "GpG", 'w', Item.ingotIron,
-			'g', Block.glass, 'G', BuildCraftCore.ironGearItem, 'p', Block.pistonBase});
+				"www", " g ", "GpG", 'w', "plankWood", 'g', Blocks.glass, 'G',
+				BuildCraftCore.woodenGearItem, 'p', Blocks.piston);
+		CoreProxy.proxy.addCraftingRecipe(new ItemStack(engineBlock, 1, 1), "www", " g ", "GpG", 'w', "cobblestone",
+				'g', Blocks.glass, 'G', BuildCraftCore.stoneGearItem, 'p', Blocks.piston);
+		CoreProxy.proxy.addCraftingRecipe(new ItemStack(engineBlock, 1, 2), "www", " g ", "GpG", 'w', Items.iron_ingot,
+				'g', Blocks.glass, 'G', BuildCraftCore.ironGearItem, 'p', Blocks.piston);
+
+		if (blockEnergyConverter != null) {
+			CoreProxy.proxy.addCraftingRecipe(new ItemStack(blockEnergyConverter, 1), "rcr", "sgs", "rcr",
+					'r', Items.redstone, 'c', BuildCraftTransport.pipePowerCobblestone,
+					's', BuildCraftTransport.pipePowerStone, 'g', Blocks.glass);
+		}
 	}
 
-	@EventHandler
+	private int findUnusedBiomeID(String biomeName) {
+		int freeBiomeID = 0;
+		// code to find a free biome
+		for (int i = 1; i < 256; i++) {
+			if (BiomeGenBase.getBiomeGenArray()[i] == null) {
+				freeBiomeID = i;
+				return freeBiomeID;
+			}
+		}
+		// failed to find any free biome IDs
+		class BiomeIdLimitException extends RuntimeException {
+			public BiomeIdLimitException(String biome) {
+				super(String.format("You have run out of free Biome ID spaces for %s", biome));
+			}
+		}
+
+		throw new BiomeIdLimitException(biomeName);
+	}
+
+	@Mod.EventHandler
 	public void processIMCRequests(FMLInterModComms.IMCEvent event) {
 		InterModComms.processIMC(event);
 	}
-	// public static int createPollution (World world, int i, int j, int k, int
-	// saturation) {
-	// int remainingSaturation = saturation;
-	//
-	// if (world.rand.nextFloat() > 0.7) {
-	// // Try to place an item on the sides
-	//
-	// LinkedList<BlockIndex> orientations = new LinkedList<BlockIndex>();
-	//
-	// for (int id = -1; id <= 1; id += 2) {
-	// for (int kd = -1; kd <= 1; kd += 2) {
-	// if (canPollute(world, i + id, j, k + kd)) {
-	// orientations.add(new BlockIndex(i + id, j, k + kd));
-	// }
-	// }
-	// }
-	//
-	// if (orientations.size() > 0) {
-	// BlockIndex toPollute =
-	// orientations.get(world.rand.nextInt(orientations.size()));
-	//
-	// int x = toPollute.i;
-	// int y = toPollute.j;
-	// int z = toPollute.k;
-	//
-	// if (world.getBlockId(x, y, z) == 0) {
-	// world.setBlock(x, y, z,
-	// BuildCraftEnergy.pollution.blockID,
-	// saturation * 16 / 100);
-	//
-	// saturationStored.put(new BlockIndex(x, y, z), new Integer(
-	// saturation));
-	// remainingSaturation = 0;
-	// } else if (world.getBlockTileEntity(z, y, z) instanceof TilePollution) {
-	// remainingSaturation = updateExitingPollution(world, x, y, z, saturation);
-	// }
-	// }
-	// }
-	//
-	// if (remainingSaturation > 0) {
-	// if (world.getBlockId(i, j + 1, k) == 0) {
-	// if (j + 1 < 128) {
-	// world.setBlock(i, j + 1, k,
-	// BuildCraftEnergy.pollution.blockID,
-	// saturation * 16 / 100);
-	// saturationStored.put(new BlockIndex(i, j + 1, k),
-	// new Integer(remainingSaturation));
-	// }
-	//
-	// remainingSaturation = 0;
-	// } else if (world.getBlockTileEntity(i, j + 1, k) instanceof
-	// TilePollution) {
-	// remainingSaturation = updateExitingPollution(world, i, j + 1,
-	// k, remainingSaturation);
-	// }
-	// }
-	//
-	// if (remainingSaturation == 0) {
-	// System.out.println ("EXIT 1");
-	// return 0;
-	// } else if (remainingSaturation == saturation) {
-	// System.out.println ("EXIT 2");
-	// return saturation;
-	// } else {
-	// System.out.println ("EXIT 3");
-	// return createPollution (world, i, j, k, remainingSaturation);
-	// }
-	// }
-	//
-	// private static int updateExitingPollution (World world, int i, int j, int
-	// k, int saturation) {
-	// int remainingSaturation = saturation;
-	//
-	// TilePollution tile = (TilePollution) world.getBlockTileEntity(
-	// i, j, k);
-	//
-	// if (tile.saturation + saturation <= 100) {
-	// remainingSaturation = 0;
-	// tile.saturation += saturation;
-	// } else {
-	// remainingSaturation = (tile.saturation + saturation) - 100;
-	// tile.saturation += saturation - remainingSaturation;
-	// }
-	//
-	// world.setBlockMetadata(i, j, k, saturation * 16 / 100);
-	// world.markBlockNeedsUpdate(i, j, k);
-	//
-	// return remainingSaturation;
-	// }
-	//
-	// private static boolean canPollute (World world, int i, int j, int k) {
-	// if (world.getBlockId(i, j, k) == 0) {
-	// return true;
-	// } else {
-	// TileEntity tile = world.getBlockTileEntity(i, j, k);
-	//
-	// return (tile instanceof TilePollution && ((TilePollution)
-	// tile).saturation < 100);
-	// }
-	// }
+
+	@Mod.EventHandler
+	public void whiteListAppliedEnergetics(FMLInitializationEvent event) {
+		FMLInterModComms.sendMessage("appliedenergistics2", "whitelist-spatial",
+				TileEngine.class.getCanonicalName());
+	}
 }

@@ -1,61 +1,55 @@
 /**
- * Copyright (c) SpaceToad, 2011 http://www.mod-buildcraft.com
+ * Copyright (c) 2011-2014, SpaceToad and the BuildCraft Team
+ * http://www.mod-buildcraft.com
  *
- * BuildCraft is distributed under the terms of the Minecraft Mod Public License
- * 1.0, or MMPL. Please check the contents of the license located in
+ * BuildCraft is distributed under the terms of the Minecraft Mod Public
+ * License 1.0, or MMPL. Please check the contents of the license located in
  * http://www.mod-buildcraft.com/MMPL-1.0.txt
  */
 package buildcraft.energy.render;
 
-import buildcraft.BuildCraftCore;
-import buildcraft.BuildCraftCore.RenderMode;
-import buildcraft.core.DefaultProps;
-import buildcraft.core.IInventoryRenderer;
-import buildcraft.energy.TileEngine;
-import buildcraft.energy.TileEngine.EnergyStage;
+import org.lwjgl.opengl.GL11;
+
 import net.minecraft.client.model.ModelBase;
 import net.minecraft.client.model.ModelRenderer;
-import net.minecraft.client.renderer.tileentity.TileEntityRenderer;
+import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
 import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.common.ForgeDirection;
-import static net.minecraftforge.common.ForgeDirection.DOWN;
-import static net.minecraftforge.common.ForgeDirection.EAST;
-import static net.minecraftforge.common.ForgeDirection.NORTH;
-import static net.minecraftforge.common.ForgeDirection.SOUTH;
-import static net.minecraftforge.common.ForgeDirection.UP;
-import static net.minecraftforge.common.ForgeDirection.WEST;
-import org.lwjgl.opengl.GL11;
+
+import net.minecraftforge.common.util.ForgeDirection;
+
+import buildcraft.BuildCraftCore;
+import buildcraft.BuildCraftCore.RenderMode;
+import buildcraft.core.IInventoryRenderer;
+import buildcraft.energy.TileEngine;
 
 public class RenderEngine extends TileEntitySpecialRenderer implements IInventoryRenderer {
 
-	private static final ResourceLocation CHAMBER_TEXTURE = new ResourceLocation(DefaultProps.TEXTURE_PATH_BLOCKS + "/chamber.png");
-	private static final ResourceLocation TRUNK_BLUE_TEXTURE = new ResourceLocation(DefaultProps.TEXTURE_PATH_BLOCKS + "/trunk_blue.png");
-	private static final ResourceLocation TRUNK_GREEN_TEXTURE = new ResourceLocation(DefaultProps.TEXTURE_PATH_BLOCKS + "/trunk_green.png");
-	private static final ResourceLocation TRUNK_YELLOW_TEXTURE = new ResourceLocation(DefaultProps.TEXTURE_PATH_BLOCKS + "/trunk_yellow.png");
-	private static final ResourceLocation TRUNK_RED_TEXTURE = new ResourceLocation(DefaultProps.TEXTURE_PATH_BLOCKS + "/trunk_red.png");
+	private static final float[] angleMap = new float[6];
+
+	static {
+		angleMap[ForgeDirection.EAST.ordinal()] = (float) -Math.PI / 2;
+		angleMap[ForgeDirection.WEST.ordinal()] = (float) Math.PI / 2;
+		angleMap[ForgeDirection.UP.ordinal()] = 0;
+		angleMap[ForgeDirection.DOWN.ordinal()] = (float) Math.PI;
+		angleMap[ForgeDirection.SOUTH.ordinal()] = (float) Math.PI / 2;
+		angleMap[ForgeDirection.NORTH.ordinal()] = (float) -Math.PI / 2;
+	}
+
 	private ModelBase model = new ModelBase() {
 	};
+
 	private ModelRenderer box;
 	private ModelRenderer trunk;
 	private ModelRenderer movingBox;
 	private ModelRenderer chamber;
-	private ResourceLocation baseTexture;
-	private static final float[] angleMap = new float[6];
 
-	static {
-		angleMap[EAST.ordinal()] = (float) -Math.PI / 2;
-		angleMap[WEST.ordinal()] = (float) Math.PI / 2;
-		angleMap[UP.ordinal()] = 0;
-		angleMap[DOWN.ordinal()] = (float) Math.PI;
-		angleMap[SOUTH.ordinal()] = (float) Math.PI / 2;
-		angleMap[NORTH.ordinal()] = (float) -Math.PI / 2;
-	}
+	private ResourceLocation baseTexture;
+	private ResourceLocation chamberTexture;
+	private ResourceLocation trunkTexture;
 
 	public RenderEngine() {
-
-		// constructor:
 		box = new ModelRenderer(model, 0, 1);
 		box.addBox(-8F, -8F, -8F, 16, 4, 16);
 		box.rotationPointX = 8;
@@ -81,28 +75,30 @@ public class RenderEngine extends TileEntitySpecialRenderer implements IInventor
 		chamber.rotationPointZ = 8F;
 	}
 
-	public RenderEngine(ResourceLocation baseTexture) {
+	public RenderEngine(ResourceLocation baseTexture, ResourceLocation chamberTexture, ResourceLocation trunkTexture) {
 		this();
 		this.baseTexture = baseTexture;
-		setTileEntityRenderer(TileEntityRenderer.instance);
+		this.chamberTexture = chamberTexture;
+		this.trunkTexture = trunkTexture;
+		field_147501_a = TileEntityRendererDispatcher.instance;
 	}
 
 	@Override
 	public void inventoryRender(double x, double y, double z, float f, float f1) {
-		render(EnergyStage.BLUE, 0.25F, ForgeDirection.UP, baseTexture, x, y, z);
+		render(0.25F, ForgeDirection.UP, baseTexture, chamberTexture, trunkTexture, x, y, z);
 	}
 
 	@Override
 	public void renderTileEntityAt(TileEntity tileentity, double x, double y, double z, float f) {
 
-		TileEngine engine = ((TileEngine) tileentity);
+		TileEngine engine = (TileEngine) tileentity;
 
 		if (engine != null) {
-			render(engine.getEnergyStage(), engine.progress, engine.orientation, engine.getTextureFile(), x, y, z);
+			render(engine.progress, engine.orientation, engine.getBaseTexture(), engine.getChamberTexture(), engine.getTrunkTexture(engine.getEnergyStage()), x, y, z);
 		}
 	}
 
-	private void render(EnergyStage energy, float progress, ForgeDirection orientation, ResourceLocation baseTexture, double x, double y, double z) {
+	private void render(float progress, ForgeDirection orientation, ResourceLocation baseTexture, ResourceLocation chamberTexture, ResourceLocation trunkTexture, double x, double y, double z) {
 
 		if (BuildCraftCore.render == RenderMode.NoDynamic) {
 			return;
@@ -127,8 +123,8 @@ public class RenderEngine extends TileEntitySpecialRenderer implements IInventor
 
 		float translatefact = step / 16;
 
-		float[] angle = { 0, 0, 0 };
-		float[] translate = { orientation.offsetX, orientation.offsetY, orientation.offsetZ };
+		float[] angle = {0, 0, 0};
+		float[] translate = {orientation.offsetX, orientation.offsetY, orientation.offsetZ};
 
 		switch (orientation) {
 			case EAST:
@@ -169,7 +165,7 @@ public class RenderEngine extends TileEntitySpecialRenderer implements IInventor
 		movingBox.render(factor);
 		GL11.glTranslatef(-translate[0] * translatefact, -translate[1] * translatefact, -translate[2] * translatefact);
 
-		bindTexture(CHAMBER_TEXTURE);
+		bindTexture(chamberTexture);
 
 		float chamberf = 2F / 16F;
 
@@ -182,24 +178,7 @@ public class RenderEngine extends TileEntitySpecialRenderer implements IInventor
 			GL11.glTranslatef(-translate[0] * chamberf, -translate[1] * chamberf, -translate[2] * chamberf);
 		}
 
-		ResourceLocation texture;
-
-		switch (energy) {
-			case BLUE:
-				texture = TRUNK_BLUE_TEXTURE;
-				break;
-			case GREEN:
-				texture = TRUNK_GREEN_TEXTURE;
-				break;
-			case YELLOW:
-				texture = TRUNK_YELLOW_TEXTURE;
-				break;
-			default:
-				texture = TRUNK_RED_TEXTURE;
-				break;
-		}
-
-		bindTexture(texture);
+		bindTexture(trunkTexture);
 
 		trunk.render(factor);
 
